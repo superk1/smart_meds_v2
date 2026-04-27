@@ -1,0 +1,771 @@
+﻿================================================================================
+FILE: lib/features/inventory/domain/entities/inventory_item.dart
+================================================================================
+
+enum ExpirationState {
+  valid,
+  expiringSoon,
+  expired,
+}
+
+enum StockState {
+  inStock,
+  lowStock,
+  outOfStock,
+}
+
+class InventoryItem {
+  final String id;
+  final String catalogMedicationId;
+  final String name;
+  final DateTime expirationDate;
+  final int quantity;
+
+  const InventoryItem({
+    required this.id,
+    required this.catalogMedicationId,
+    required this.name,
+    required this.expirationDate,
+    required this.quantity,
+  });
+
+  ExpirationState get expirationState {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final expDate = DateTime(expirationDate.year, expirationDate.month, expirationDate.day);
+    
+    if (expDate.isBefore(today)) {
+      return ExpirationState.expired;
+    }
+    
+    final difference = expDate.difference(today).inDays;
+    if (difference <= 30) {
+      return ExpirationState.expiringSoon;
+    }
+    
+    return ExpirationState.valid;
+  }
+
+  StockState get stockState {
+    if (quantity <= 0) {
+      return StockState.outOfStock;
+    } else if (quantity == 1) {
+      return StockState.lowStock;
+    } else {
+      return StockState.inStock;
+    }
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/inventory/data/models/inventory_item_model.dart
+================================================================================
+
+import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
+
+class InventoryItemModel {
+  final String id;
+  final String catalogMedicationId;
+  final String name;
+  final DateTime expirationDate;
+  final int quantity;
+
+  InventoryItemModel({
+    required this.id,
+    required this.catalogMedicationId,
+    required this.name,
+    required this.expirationDate,
+    required this.quantity,
+  });
+
+  factory InventoryItemModel.fromDomain(InventoryItem entity) {
+    return InventoryItemModel(
+      id: entity.id,
+      catalogMedicationId: entity.catalogMedicationId,
+      name: entity.name,
+      expirationDate: entity.expirationDate,
+      quantity: entity.quantity,
+    );
+  }
+
+  InventoryItem toDomain() {
+    return InventoryItem(
+      id: id,
+      catalogMedicationId: catalogMedicationId,
+      name: name,
+      expirationDate: expirationDate,
+      quantity: quantity,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'catalogMedicationId': catalogMedicationId,
+      'name': name,
+      'expirationDate': expirationDate.toIso8601String(),
+      'quantity': quantity,
+    };
+  }
+
+  factory InventoryItemModel.fromMap(Map<String, dynamic> map) {
+    return InventoryItemModel(
+      id: map['id'] as String,
+      catalogMedicationId: map['catalogMedicationId'] as String,
+      name: map['name'] as String,
+      expirationDate: DateTime.parse(map['expirationDate'] as String),
+      quantity: map['quantity'] as int,
+    );
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/inventory/data/fakes/fake_inventory_repository.dart
+================================================================================
+
+import 'dart:convert';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/inventory/data/models/inventory_item_model.dart';
+import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
+import 'package:smart_meds_v2/features/inventory/domain/repositories/inventory_repository.dart';
+
+class FakeInventoryRepository implements InventoryRepository {
+  final LocalStorageService _storage;
+  static const String _storageKey = 'inventory_items';
+
+  final List<InventoryItem> _items = [];
+  bool _isInitialized = false;
+
+  FakeInventoryRepository(this._storage);
+
+  Future<void> _init() async {
+    if (_isInitialized) return;
+
+    final storedData = _storage.readString(_storageKey);
+    if (storedData != null) {
+      final List<dynamic> decoded = jsonDecode(storedData);
+      _items.clear();
+      _items.addAll(
+        decoded.map((m) => InventoryItemModel.fromMap(m as Map<String, dynamic>).toDomain()),
+      );
+    } else {
+      // Seed initial data if nothing is stored
+      _items.addAll([
+        InventoryItem(
+          id: 'inv_1',
+          catalogMedicationId: 'cat_1',
+          name: 'Paracetamol 500mg',
+          expirationDate: DateTime.now().add(const Duration(days: 365)),
+          quantity: 2,
+        ),
+        InventoryItem(
+          id: 'inv_2',
+          catalogMedicationId: 'cat_2',
+          name: 'Ibuprofeno 400mg',
+          expirationDate: DateTime.now().add(const Duration(days: 180)),
+          quantity: 1,
+        ),
+      ]);
+      await _save();
+    }
+    _isInitialized = true;
+  }
+
+  Future<void> _save() async {
+    final String encoded = jsonEncode(
+      _items.map((i) => InventoryItemModel.fromDomain(i).toMap()).toList(),
+    );
+    await _storage.writeString(_storageKey, encoded);
+  }
+
+  String _normalizeName(String name) {
+    return name.trim().toLowerCase()
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u');
+  }
+
+  void _validateItem(InventoryItem item) {
+    if (item.name.trim().isEmpty) {
+      throw Exception('El nombre del medicamento no puede estar vacío');
+    }
+    if (item.quantity <= 0) {
+      throw Exception('La cantidad debe ser mayor a 0');
+    }
+    final today = DateTime.now();
+    final todayMidnight = DateTime(today.year, today.month, today.day);
+    if (item.expirationDate.isBefore(todayMidnight)) {
+      throw Exception('La fecha de vencimiento no puede ser anterior a hoy');
+    }
+  }
+
+  @override
+  Future<List<InventoryItem>> getUserInventory() async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    return List.unmodifiable(_items);
+  }
+
+  @override
+  Future<void> addInventoryItem(InventoryItem item) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    
+    _validateItem(item);
+
+    // Rule: Combine duplicates
+    int existingIndex = -1;
+    if (item.catalogMedicationId != 'desconocido') {
+      existingIndex = _items.indexWhere(
+        (i) => i.catalogMedicationId == item.catalogMedicationId &&
+               i.expirationDate.year == item.expirationDate.year &&
+               i.expirationDate.month == item.expirationDate.month &&
+               i.expirationDate.day == item.expirationDate.day
+      );
+    } else {
+      final normalizedNew = _normalizeName(item.name);
+      existingIndex = _items.indexWhere(
+        (i) => i.catalogMedicationId == 'desconocido' &&
+               _normalizeName(i.name) == normalizedNew &&
+               i.expirationDate.year == item.expirationDate.year &&
+               i.expirationDate.month == item.expirationDate.month &&
+               i.expirationDate.day == item.expirationDate.day
+      );
+    }
+
+    if (existingIndex != -1) {
+      final existing = _items[existingIndex];
+      _items[existingIndex] = InventoryItem(
+        id: existing.id,
+        catalogMedicationId: existing.catalogMedicationId,
+        name: existing.name,
+        expirationDate: existing.expirationDate,
+        quantity: existing.quantity + item.quantity,
+      );
+    } else {
+      _items.add(item);
+    }
+
+    await _save();
+  }
+
+  @override
+  Future<void> updateInventoryItem(InventoryItem item) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    
+    _validateItem(item);
+
+    final index = _items.indexWhere((i) => i.id == item.id);
+    if (index != -1) {
+      _items[index] = item;
+      await _save();
+    }
+  }
+
+  @override
+  Future<void> removeInventoryItem(String id) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _items.removeWhere((item) => item.id == id);
+    await _save();
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/catalog/domain/entities/catalog_medication.dart
+================================================================================
+
+class CatalogMedication {
+  final String id;
+  final String name;
+  final String activeIngredient;
+
+  const CatalogMedication({
+    required this.id,
+    required this.name,
+    required this.activeIngredient,
+  });
+}
+
+
+
+================================================================================
+FILE: lib/features/catalog/data/models/catalog_medication_model.dart
+================================================================================
+
+import 'package:smart_meds_v2/features/catalog/domain/entities/catalog_medication.dart';
+
+class CatalogMedicationModel {
+  final String id;
+  final String name;
+  final String activeIngredient;
+
+  CatalogMedicationModel({
+    required this.id,
+    required this.name,
+    required this.activeIngredient,
+  });
+
+  factory CatalogMedicationModel.fromDomain(CatalogMedication entity) {
+    return CatalogMedicationModel(
+      id: entity.id,
+      name: entity.name,
+      activeIngredient: entity.activeIngredient,
+    );
+  }
+
+  CatalogMedication toDomain() {
+    return CatalogMedication(
+      id: id,
+      name: name,
+      activeIngredient: activeIngredient,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'activeIngredient': activeIngredient,
+    };
+  }
+
+  factory CatalogMedicationModel.fromMap(Map<String, dynamic> map) {
+    return CatalogMedicationModel(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      activeIngredient: map['activeIngredient'] as String,
+    );
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/catalog/data/fakes/fake_catalog_repository.dart
+================================================================================
+
+import 'dart:convert';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/catalog/data/models/catalog_medication_model.dart';
+import 'package:smart_meds_v2/features/catalog/domain/entities/catalog_medication.dart';
+import 'package:smart_meds_v2/features/catalog/domain/repositories/catalog_repository.dart';
+
+class FakeCatalogRepository implements CatalogRepository {
+  final LocalStorageService _storage;
+  static const String _storageKey = 'catalog_medications';
+
+  final List<CatalogMedication> _medications = [];
+  bool _isInitialized = false;
+
+  FakeCatalogRepository(this._storage);
+
+  Future<void> _init() async {
+    if (_isInitialized) return;
+
+    final storedData = _storage.readString(_storageKey);
+    if (storedData != null) {
+      final List<dynamic> decoded = jsonDecode(storedData);
+      _medications.clear();
+      _medications.addAll(
+        decoded.map((m) => CatalogMedicationModel.fromMap(m as Map<String, dynamic>).toDomain()),
+      );
+    } else {
+      // Seed initial data
+      _medications.addAll(const [
+        CatalogMedication(id: 'cat_1', name: 'Paracetamol 500mg', activeIngredient: 'Paracetamol'),
+        CatalogMedication(id: 'cat_2', name: 'Ibuprofeno 400mg', activeIngredient: 'Ibuprofeno'),
+        CatalogMedication(id: 'cat_3', name: 'Loratadina 10mg', activeIngredient: 'Loratadina'),
+        CatalogMedication(id: 'cat_4', name: 'Omeprazol 20mg', activeIngredient: 'Omeprazol'),
+        CatalogMedication(id: 'cat_5', name: 'Amoxicilina 500mg', activeIngredient: 'Amoxicilina'),
+      ]);
+      await _save();
+    }
+    _isInitialized = true;
+  }
+
+  Future<void> _save() async {
+    final String encoded = jsonEncode(
+      _medications.map((m) => CatalogMedicationModel.fromDomain(m).toMap()).toList(),
+    );
+    await _storage.writeString(_storageKey, encoded);
+  }
+
+  @override
+  Future<List<CatalogMedication>> searchMedications(String query) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (query.isEmpty) {
+      return List.unmodifiable(_medications);
+    }
+    final lowerQuery = query.toLowerCase();
+    return _medications.where((med) {
+      return med.name.toLowerCase().contains(lowerQuery) ||
+          med.activeIngredient.toLowerCase().contains(lowerQuery);
+    }).toList();
+  }
+
+  @override
+  Future<CatalogMedication?> getMedicationById(String id) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    try {
+      return _medications.firstWhere((med) => med.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/admin_review/domain/entities/pending_medication_submission.dart
+================================================================================
+
+class PendingMedicationSubmission {
+  final String id;
+  final String proposedName;
+  final String proposedActiveIngredient;
+  final String userId;
+
+  const PendingMedicationSubmission({
+    required this.id,
+    required this.proposedName,
+    required this.proposedActiveIngredient,
+    required this.userId,
+  });
+}
+
+
+
+================================================================================
+FILE: lib/features/admin_review/data/models/pending_medication_submission_model.dart
+================================================================================
+
+import 'package:smart_meds_v2/features/admin_review/domain/entities/pending_medication_submission.dart';
+
+class PendingMedicationSubmissionModel {
+  final String id;
+  final String proposedName;
+  final String proposedActiveIngredient;
+  final String userId;
+
+  PendingMedicationSubmissionModel({
+    required this.id,
+    required this.proposedName,
+    required this.proposedActiveIngredient,
+    required this.userId,
+  });
+
+  factory PendingMedicationSubmissionModel.fromDomain(PendingMedicationSubmission entity) {
+    return PendingMedicationSubmissionModel(
+      id: entity.id,
+      proposedName: entity.proposedName,
+      proposedActiveIngredient: entity.proposedActiveIngredient,
+      userId: entity.userId,
+    );
+  }
+
+  PendingMedicationSubmission toDomain() {
+    return PendingMedicationSubmission(
+      id: id,
+      proposedName: proposedName,
+      proposedActiveIngredient: proposedActiveIngredient,
+      userId: userId,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'proposedName': proposedName,
+      'proposedActiveIngredient': proposedActiveIngredient,
+      'userId': userId,
+    };
+  }
+
+  factory PendingMedicationSubmissionModel.fromMap(Map<String, dynamic> map) {
+    return PendingMedicationSubmissionModel(
+      id: map['id'] as String,
+      proposedName: map['proposedName'] as String,
+      proposedActiveIngredient: map['proposedActiveIngredient'] as String,
+      userId: map['userId'] as String,
+    );
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/admin_review/data/fakes/fake_pending_submission_repository.dart
+================================================================================
+
+import 'dart:convert';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/admin_review/data/models/pending_medication_submission_model.dart';
+import 'package:smart_meds_v2/features/admin_review/domain/entities/pending_medication_submission.dart';
+import 'package:smart_meds_v2/features/admin_review/domain/repositories/pending_submission_repository.dart';
+
+class FakePendingSubmissionRepository implements PendingSubmissionRepository {
+  final LocalStorageService _storage;
+  static const String _storageKey = 'admin_pending_submissions';
+
+  final List<PendingMedicationSubmission> _submissions = [];
+  bool _isInitialized = false;
+
+  FakePendingSubmissionRepository(this._storage);
+
+  Future<void> _init() async {
+    if (_isInitialized) return;
+
+    final storedData = _storage.readString(_storageKey);
+    if (storedData != null) {
+      final List<dynamic> decoded = jsonDecode(storedData);
+      _submissions.clear();
+      _submissions.addAll(
+        decoded.map((m) => PendingMedicationSubmissionModel.fromMap(m as Map<String, dynamic>).toDomain()),
+      );
+    } else {
+      // Seed initial data
+      _submissions.addAll([
+        const PendingMedicationSubmission(
+          id: 'sub_1',
+          proposedName: 'Aspirina 500mg',
+          proposedActiveIngredient: 'Ácido Acetilsalicílico',
+          userId: 'user_123',
+        ),
+        const PendingMedicationSubmission(
+          id: 'sub_2',
+          proposedName: 'Tempra Forte',
+          proposedActiveIngredient: 'Paracetamol',
+          userId: 'user_456',
+        ),
+      ]);
+      await _save();
+    }
+    _isInitialized = true;
+  }
+
+  Future<void> _save() async {
+    final String encoded = jsonEncode(
+      _submissions.map((s) => PendingMedicationSubmissionModel.fromDomain(s).toMap()).toList(),
+    );
+    await _storage.writeString(_storageKey, encoded);
+  }
+
+  @override
+  Future<List<PendingMedicationSubmission>> getPendingSubmissions() async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    return List.unmodifiable(_submissions);
+  }
+
+  @override
+  Future<void> approveSubmission(String id) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _submissions.removeWhere((sub) => sub.id == id);
+    await _save();
+  }
+
+  @override
+  Future<void> rejectSubmission(String id) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _submissions.removeWhere((sub) => sub.id == id);
+    await _save();
+  }
+}
+
+
+
+================================================================================
+FILE: test/features/inventory/inventory_repository_test.dart
+================================================================================
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
+import 'package:smart_meds_v2/features/inventory/data/fakes/fake_inventory_repository.dart';
+import '../../helpers/test_helpers.dart';
+
+void main() {
+  late FakeInventoryRepository repository;
+  late FakeLocalStorageService storage;
+
+  setUp(() {
+    storage = FakeLocalStorageService();
+    repository = FakeInventoryRepository(storage);
+  });
+
+  group('FakeInventoryRepository Tests', () {
+    test('addInventoryItem combines quantities for same catalogMedicationId and expiration', () async {
+      final expiration = DateTime.now().add(const Duration(days: 100));
+      final item1 = InventoryItem(
+        id: '1',
+        catalogMedicationId: 'cat_1',
+        name: 'Med 1',
+        expirationDate: expiration,
+        quantity: 2,
+      );
+      final item2 = InventoryItem(
+        id: '2',
+        catalogMedicationId: 'cat_1',
+        name: 'Med 1',
+        expirationDate: expiration,
+        quantity: 3,
+      );
+
+      await repository.addInventoryItem(item1);
+      await repository.addInventoryItem(item2);
+
+      final items = await repository.getUserInventory();
+      // Initially there are 2 seeded items, plus these 2 combined = 3 total?
+      // Let's check how many items are in the seed.
+      // Seed has 'inv_1' (cat_1) and 'inv_2' (cat_2).
+      // 'inv_1' has cat_1 but different expiration probably.
+      
+      final cat1Items = items.where((i) => i.catalogMedicationId == 'cat_1').toList();
+      
+      // If expiration matches exactly, it should combine.
+      // My item1/item2 have exact same expiration.
+      expect(cat1Items.any((i) => i.quantity == 5), isTrue);
+    });
+
+    test('addInventoryItem combines quantities for unknown medication with same normalized name', () async {
+      final expiration = DateTime.now().add(const Duration(days: 100));
+      final item1 = InventoryItem(
+        id: '1',
+        catalogMedicationId: 'desconocido',
+        name: 'Aspirina',
+        expirationDate: expiration,
+        quantity: 1,
+      );
+      final item2 = InventoryItem(
+        id: '2',
+        catalogMedicationId: 'desconocido',
+        name: ' aspirína ', // Normalized should match 'aspirina'
+        expirationDate: expiration,
+        quantity: 4,
+      );
+
+      await repository.addInventoryItem(item1);
+      await repository.addInventoryItem(item2);
+
+      final items = await repository.getUserInventory();
+      final unknownItems = items.where((i) => i.catalogMedicationId == 'desconocido').toList();
+      
+      expect(unknownItems.any((i) => i.quantity == 5), isTrue);
+    });
+
+    test('addInventoryItem throws exception for invalid data', () async {
+      final item = InventoryItem(
+        id: '1',
+        catalogMedicationId: 'cat_1',
+        name: '', // Invalid empty name
+        expirationDate: DateTime.now().add(const Duration(days: 100)),
+        quantity: 1,
+      );
+
+      expect(() => repository.addInventoryItem(item), throwsException);
+    });
+  });
+}
+
+
+
+================================================================================
+FILE: test/features/inventory/inventory_item_model_test.dart
+================================================================================
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
+import 'package:smart_meds_v2/features/inventory/data/models/inventory_item_model.dart';
+
+void main() {
+  group('InventoryItemModel Tests', () {
+    test('round trip: entity -> model -> map -> model -> entity', () {
+      final expiration = DateTime(2025, 12, 31);
+      final entity = InventoryItem(
+        id: '1',
+        catalogMedicationId: 'cat_1',
+        name: 'Med 1',
+        expirationDate: expiration,
+        quantity: 5,
+      );
+
+      final model = InventoryItemModel.fromDomain(entity);
+      final map = model.toMap();
+      final fromMapModel = InventoryItemModel.fromMap(map);
+      final fromMapEntity = fromMapModel.toDomain();
+
+      expect(fromMapEntity.id, entity.id);
+      expect(fromMapEntity.catalogMedicationId, entity.catalogMedicationId);
+      expect(fromMapEntity.name, entity.name);
+      expect(fromMapEntity.expirationDate, entity.expirationDate);
+      expect(fromMapEntity.quantity, entity.quantity);
+    });
+  });
+}
+
+
+
+================================================================================
+FILE: AGENTS.MD
+================================================================================
+
+D:\proyectos\smart_meds_V2>flutter analyze
+
+┌─────────────────────────────────────────────────────────┐
+│ A new version of Flutter is available!                  │
+│                                                         │
+│ To update to the latest version, run "flutter upgrade". │
+└─────────────────────────────────────────────────────────┘
+Analyzing smart_meds_V2...
+No issues found! (ran in 3.7s)
+
+D:\proyectos\smart_meds_V2>flutter test
+00:07 +1: All tests passed!
+
+D:\proyectos\smart_meds_V2>
+
+
+# AGENTS.md - Contexto y Reglas para Agentes de IA
+
+Este archivo define el contexto del proyecto y las reglas estrictas de interacción que los agentes de IA (como Antigravity) deben seguir al trabajar en **Smart Med V2**.
+
+## Objetivo del Proyecto
+Crear una aplicación eficiente y práctica para la gestión del botiquín del hogar, permitiendo un manejo claro del inventario personal y facilitando la búsqueda por medicamentos o malestares.
+
+## Resumen del Producto
+Smart Med V2 es la evolución desde cero del proyecto original. Incluirá un catálogo global moderado y un inventario privado por usuario, enfoque en la practicidad y resolución de problemas reales del botiquín doméstico. 
+
+## Reglas de Interacción Acordadas
+
+1. **Trabajar por Fases:** El desarrollo se divide en fases estrictas. No se deben adelantar funcionalidades de fases futuras.
+2. **Entregar Archivos Completos:** Cero opciones ambiguas, cero pseudocódigo y cero cambios parciales. Los archivos modificados o creados deben entregarse completos y funcionales.
+3. **Rutas Reales:** No asumir rutas inexistentes. Trabajar exclusivamente con las rutas proporcionadas.
+4. **Respetar la Raíz:** Todo el trabajo se realiza obligatoriamente en el directorio local:
+   `D:\proyectos\smart_meds_V2`
+5. **Aislamiento de V1:** Smart Med V1 no debe ser modificado, tocado ni alterado. Se mantiene exclusivamente como referencia.
+6. **Regla de OCR:** No se utilizará Gemini para la funcionalidad de OCR en V2. El OCR será local en fases futuras.
+7. **Regla de Dominio:** No se debe mezclar el catálogo global y el inventario privado en la misma entidad de dominio; deben permanecer estrictamente separados.
+8. **Configuración MCP:** `CODINGBUDDY_PROJECT_ROOT` es la única variable de entorno válida de referencia para la raíz del proyecto dentro de `mcp_config.json`. No inventar otras variables para la ruta del proyecto.
+9. **Sin Placeholders Falsos:** No introducir placeholders técnicos ficticios en configuraciones del proyecto; toda configuración debe ser real, válida o declararse explícitamente como pendiente futura sin comandos falsos.
+10. **Arquitectura Real:** Smart Med V2 usa arquitectura feature-first con capas por feature cuando aplique. No crear archivos vacíos sin propósito.
+11. **Fakes Permitidos en Fases Tempranas:** En fases tempranas se permiten fake repositories en memoria cuando sirven para validar arquitectura y flujos sin introducir infraestructura real.
+12. **Abstracción de Servicios de Captura:** La feature de Intake debe depender de interfaces de dominio para servicios de captura (Barcode, OCR). Esto permite que el flujo sea robusto y esté preparado para conectar implementaciones reales (cámara, hardware) en fases futuras sin reescribir la lógica de negocio.
+13. **Separación de Dominio y Data (DTOs):** Las entidades de dominio deben permanecer puras y libres de lógica de infraestructura (como serialización JSON). Se deben utilizar modelos/DTOs en la capa de data para manejar la persistencia y comunicación externa, con mappers claros hacia/desde el dominio.
+14. **Reglas de Coherencia de Inventario:** El inventario debe evitar duplicados combinando cantidades cuando se agrega un medicamento con el mismo ID de catálogo (o nombre normalizado si es desconocido) y la misma fecha de vencimiento.
+
+
+

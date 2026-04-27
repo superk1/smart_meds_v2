@@ -14,12 +14,14 @@ class IntakeState {
   final InventoryItem? draftItem;
   final IntakeSource? source;
   final String? errorMessage;
+  final Map<String, String>? fieldErrors;
 
   const IntakeState({
     this.status = IntakeStatus.idle,
     this.draftItem,
     this.source,
     this.errorMessage,
+    this.fieldErrors,
   });
 
   IntakeState copyWith({
@@ -27,12 +29,14 @@ class IntakeState {
     InventoryItem? draftItem,
     IntakeSource? source,
     String? errorMessage,
+    Map<String, String>? fieldErrors,
   }) {
     return IntakeState(
       status: status ?? this.status,
       draftItem: draftItem ?? this.draftItem,
       source: source ?? this.source,
       errorMessage: errorMessage ?? this.errorMessage,
+      fieldErrors: fieldErrors ?? this.fieldErrors,
     );
   }
 }

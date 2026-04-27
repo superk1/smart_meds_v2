@@ -1,6 +1,28 @@
 import 'package:smart_meds_v2/features/intake/domain/entities/intake_capture_result.dart';
+import 'package:smart_meds_v2/features/intake/domain/services/intake_capture_service.dart';
 
-class FakeIntakeCaptureService {
+class FakeIntakeCaptureService implements BarcodeCaptureService, ImageOcrCaptureService, ManualSearchService {
+  bool _forceNoMatch = false;
+
+  void setForceNoMatch(bool value) => _forceNoMatch = value;
+
+  @override
+  Future<IntakeCaptureResult> scanBarcode() async {
+    if (_forceNoMatch) return simulateBarcodeNoMatch();
+    return simulateBarcodeMatch();
+  }
+
+  @override
+  Future<IntakeCaptureResult> captureFromImage() async {
+    // Simular OCR devolviendo algo conocido para pruebas
+    return simulateManualSearchMatch('OCR Match');
+  }
+
+  @override
+  Future<IntakeCaptureResult> searchByText(String query) async {
+    return simulateManualSearchMatch(query);
+  }
+
   /// Simula una captura por código de barras que resulta en una coincidencia exacta
   /// con un medicamento del catálogo fake.
   Future<IntakeCaptureResult> simulateBarcodeMatch() async {

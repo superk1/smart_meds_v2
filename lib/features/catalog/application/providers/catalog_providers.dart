@@ -1,12 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_meds_v2/features/catalog/application/use_cases/get_catalog_medications_use_case.dart';
 import 'package:smart_meds_v2/features/catalog/application/use_cases/search_catalog_medications_use_case.dart';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
 import 'package:smart_meds_v2/features/catalog/data/fakes/fake_catalog_repository.dart';
 import 'package:smart_meds_v2/features/catalog/domain/entities/catalog_medication.dart';
 import 'package:smart_meds_v2/features/catalog/domain/repositories/catalog_repository.dart';
 
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
-  return FakeCatalogRepository();
+  return FakeCatalogRepository(ref.watch(localStorageServiceProvider));
 });
 
 final getCatalogMedicationsUseCaseProvider = Provider<GetCatalogMedicationsUseCase>((ref) {

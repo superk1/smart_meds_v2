@@ -1,0 +1,975 @@
+﻿================================================================================
+FILE: pubspec.yaml
+================================================================================
+
+name: smart_meds_v2
+description: Smart Med V2 - Flutter app for practical household medicine cabinet management.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^3.3.1
+  go_router: ^17.2.2
+  shared_preferences: ^2.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+
+
+================================================================================
+FILE: lib/core/services/local_storage_service.dart
+================================================================================
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// Service to abstract local storage operations.
+class LocalStorageService {
+  final SharedPreferences _prefs;
+
+  LocalStorageService(this._prefs);
+
+  Future<void> writeString(String key, String value) async {
+    await _prefs.setString(key, value);
+  }
+
+  String? readString(String key) {
+    return _prefs.getString(key);
+  }
+
+  Future<void> remove(String key) async {
+    await _prefs.remove(key);
+  }
+}
+
+/// Provider for the LocalStorageService.
+/// Note: Since SharedPreferences.getInstance() is async, this needs to be initialized.
+final localStorageServiceProvider = Provider<LocalStorageService>((ref) {
+  throw UnimplementedError('localStorageServiceProvider must be overridden in ProviderScope');
+});
+
+
+
+================================================================================
+FILE: lib/main.dart
+================================================================================
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_meds_v2/app/bootstrap/app_bootstrap.dart';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  final prefs = await SharedPreferences.getInstance();
+  
+  runApp(
+    ProviderScope(
+      overrides: [
+        localStorageServiceProvider.overrideWithValue(LocalStorageService(prefs)),
+      ],
+      child: const AppBootstrap(),
+    ),
+  );
+}
+
+
+
+================================================================================
+FILE: lib/features/inventory/domain/entities/inventory_item.dart
+================================================================================
+
+enum ExpirationState {
+  valid,
+  expiringSoon,
+  expired,
+}
+
+enum StockState {
+  inStock,
+  lowStock,
+  outOfStock,
+}
+
+class InventoryItem {
+  final String id;
+  final String catalogMedicationId;
+  final String name;
+  final DateTime expirationDate;
+  final int quantity;
+
+  const InventoryItem({
+    required this.id,
+    required this.catalogMedicationId,
+    required this.name,
+    required this.expirationDate,
+    required this.quantity,
+  });
+
+  ExpirationState get expirationState {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final expDate = DateTime(expirationDate.year, expirationDate.month, expirationDate.day);
+    
+    if (expDate.isBefore(today)) {
+      return ExpirationState.expired;
+    }
+    
+    final difference = expDate.difference(today).inDays;
+    if (difference <= 30) {
+      return ExpirationState.expiringSoon;
+    }
+    
+    return ExpirationState.valid;
+  }
+
+  StockState get stockState {
+    if (quantity <= 0) {
+      return StockState.outOfStock;
+    } else if (quantity == 1) {
+      return StockState.lowStock;
+    } else {
+      return StockState.inStock;
+    }
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'catalogMedicationId': catalogMedicationId,
+      'name': name,
+      'expirationDate': expirationDate.toIso8601String(),
+      'quantity': quantity,
+    };
+  }
+
+  factory InventoryItem.fromMap(Map<String, dynamic> map) {
+    return InventoryItem(
+      id: map['id'] as String,
+      catalogMedicationId: map['catalogMedicationId'] as String,
+      name: map['name'] as String,
+      expirationDate: DateTime.parse(map['expirationDate'] as String),
+      quantity: map['quantity'] as int,
+    );
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/inventory/data/fakes/fake_inventory_repository.dart
+================================================================================
+
+import 'dart:convert';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
+import 'package:smart_meds_v2/features/inventory/domain/repositories/inventory_repository.dart';
+
+class FakeInventoryRepository implements InventoryRepository {
+  final LocalStorageService _storage;
+  static const String _storageKey = 'inventory_items';
+
+  final List<InventoryItem> _items = [];
+  bool _isInitialized = false;
+
+  FakeInventoryRepository(this._storage);
+
+  Future<void> _init() async {
+    if (_isInitialized) return;
+
+    final storedData = _storage.readString(_storageKey);
+    if (storedData != null) {
+      final List<dynamic> decoded = jsonDecode(storedData);
+      _items.clear();
+      _items.addAll(decoded.map((m) => InventoryItem.fromMap(m as Map<String, dynamic>)));
+    } else {
+      // Seed initial data if nothing is stored
+      _items.addAll([
+        InventoryItem(
+          id: 'inv_1',
+          catalogMedicationId: 'cat_1',
+          name: 'Paracetamol 500mg',
+          expirationDate: DateTime.now().add(const Duration(days: 365)),
+          quantity: 2,
+        ),
+        InventoryItem(
+          id: 'inv_2',
+          catalogMedicationId: 'cat_2',
+          name: 'Ibuprofeno 400mg',
+          expirationDate: DateTime.now().add(const Duration(days: 180)),
+          quantity: 1,
+        ),
+      ]);
+      await _save();
+    }
+    _isInitialized = true;
+  }
+
+  Future<void> _save() async {
+    final String encoded = jsonEncode(_items.map((i) => i.toMap()).toList());
+    await _storage.writeString(_storageKey, encoded);
+  }
+
+  @override
+  Future<List<InventoryItem>> getUserInventory() async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    return List.unmodifiable(_items);
+  }
+
+  @override
+  Future<void> addInventoryItem(InventoryItem item) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _items.add(item);
+    await _save();
+  }
+
+  @override
+  Future<void> updateInventoryItem(InventoryItem item) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    final index = _items.indexWhere((i) => i.id == item.id);
+    if (index != -1) {
+      _items[index] = item;
+      await _save();
+    }
+  }
+
+  @override
+  Future<void> removeInventoryItem(String id) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _items.removeWhere((item) => item.id == id);
+    await _save();
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/inventory/application/providers/inventory_providers.dart
+================================================================================
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_meds_v2/features/inventory/application/use_cases/add_inventory_item_use_case.dart';
+import 'package:smart_meds_v2/features/inventory/application/use_cases/get_inventory_items_use_case.dart';
+import 'package:smart_meds_v2/features/inventory/application/use_cases/remove_inventory_item_use_case.dart';
+import 'package:smart_meds_v2/features/inventory/application/use_cases/update_inventory_item_use_case.dart';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/inventory/data/fakes/fake_inventory_repository.dart';
+import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
+import 'package:smart_meds_v2/features/inventory/domain/repositories/inventory_repository.dart';
+
+final inventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
+  return FakeInventoryRepository(ref.watch(localStorageServiceProvider));
+});
+
+final getInventoryItemsUseCaseProvider = Provider<GetInventoryItemsUseCase>((ref) {
+  return GetInventoryItemsUseCase(ref.watch(inventoryRepositoryProvider));
+});
+
+final addInventoryItemUseCaseProvider = Provider<AddInventoryItemUseCase>((ref) {
+  return AddInventoryItemUseCase(ref.watch(inventoryRepositoryProvider));
+});
+
+final updateInventoryItemUseCaseProvider = Provider<UpdateInventoryItemUseCase>((ref) {
+  return UpdateInventoryItemUseCase(ref.watch(inventoryRepositoryProvider));
+});
+
+final removeInventoryItemUseCaseProvider = Provider<RemoveInventoryItemUseCase>((ref) {
+  return RemoveInventoryItemUseCase(ref.watch(inventoryRepositoryProvider));
+});
+
+class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
+  @override
+  Future<List<InventoryItem>> build() async {
+    return ref.watch(getInventoryItemsUseCaseProvider).execute();
+  }
+
+  Future<void> addItem(InventoryItem item) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(addInventoryItemUseCaseProvider).execute(item);
+      return ref.read(getInventoryItemsUseCaseProvider).execute();
+    });
+  }
+
+  Future<void> useItem(InventoryItem item) async {
+    if (item.quantity <= 0) return;
+    
+    final updatedItem = InventoryItem(
+      id: item.id,
+      catalogMedicationId: item.catalogMedicationId,
+      name: item.name,
+      expirationDate: item.expirationDate,
+      quantity: item.quantity - 1,
+    );
+
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(updateInventoryItemUseCaseProvider).execute(updatedItem);
+      return ref.read(getInventoryItemsUseCaseProvider).execute();
+    });
+  }
+
+  Future<void> restockItem(InventoryItem item) async {
+    final updatedItem = InventoryItem(
+      id: item.id,
+      catalogMedicationId: item.catalogMedicationId,
+      name: item.name,
+      expirationDate: item.expirationDate,
+      quantity: item.quantity + 1,
+    );
+
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(updateInventoryItemUseCaseProvider).execute(updatedItem);
+      return ref.read(getInventoryItemsUseCaseProvider).execute();
+    });
+  }
+
+  Future<void> discardItem(String id) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(removeInventoryItemUseCaseProvider).execute(id);
+      return ref.read(getInventoryItemsUseCaseProvider).execute();
+    });
+  }
+}
+
+final inventoryListProvider = AsyncNotifierProvider<InventoryNotifier, List<InventoryItem>>(() {
+  return InventoryNotifier();
+});
+
+enum InventoryFilter {
+  all,
+  expiringSoon,
+  expired,
+  outOfStock,
+}
+
+class InventoryFilterNotifier extends Notifier<InventoryFilter> {
+  @override
+  InventoryFilter build() => InventoryFilter.all;
+
+  void setFilter(InventoryFilter filter) {
+    state = filter;
+  }
+}
+
+final inventoryFilterProvider = NotifierProvider<InventoryFilterNotifier, InventoryFilter>(() {
+  return InventoryFilterNotifier();
+});
+
+class InventorySearchQueryNotifier extends Notifier<String> {
+  @override
+  String build() => '';
+
+  void setQuery(String query) {
+    state = query;
+  }
+
+  void clearQuery() {
+    state = '';
+  }
+}
+
+final inventorySearchQueryProvider = NotifierProvider<InventorySearchQueryNotifier, String>(() {
+  return InventorySearchQueryNotifier();
+});
+
+enum InventorySortCriteria {
+  expirationDate,
+  nameAZ,
+  lowStock,
+}
+
+class InventorySortCriteriaNotifier extends Notifier<InventorySortCriteria> {
+  @override
+  InventorySortCriteria build() => InventorySortCriteria.expirationDate;
+
+  void setSortCriteria(InventorySortCriteria criteria) {
+    state = criteria;
+  }
+}
+
+final inventorySortCriteriaProvider =
+    NotifierProvider<InventorySortCriteriaNotifier, InventorySortCriteria>(() {
+  return InventorySortCriteriaNotifier();
+});
+
+final inventorySummaryProvider = Provider<AsyncValue<Map<String, int>>>((ref) {
+  final inventoryAsync = ref.watch(inventoryListProvider);
+
+  return inventoryAsync.whenData((items) {
+    return {
+      'total': items.length,
+      'expiringSoon': items.where((i) => i.expirationState == ExpirationState.expiringSoon).length,
+      'expired': items.where((i) => i.expirationState == ExpirationState.expired).length,
+      'outOfStock': items.where((i) => i.stockState == StockState.outOfStock).length,
+    };
+  });
+});
+
+final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref) {
+  final inventoryAsync = ref.watch(inventoryListProvider);
+  final filter = ref.watch(inventoryFilterProvider);
+  final query = ref.watch(inventorySearchQueryProvider).trim().toLowerCase();
+  final sortCriteria = ref.watch(inventorySortCriteriaProvider);
+
+  return inventoryAsync.whenData((items) {
+    // 1. Filter by status
+    final statusFiltered = switch (filter) {
+      InventoryFilter.all => items,
+      InventoryFilter.expiringSoon =>
+        items.where((i) => i.expirationState == ExpirationState.expiringSoon).toList(),
+      InventoryFilter.expired => items.where((i) => i.expirationState == ExpirationState.expired).toList(),
+      InventoryFilter.outOfStock => items.where((i) => i.stockState == StockState.outOfStock).toList(),
+    };
+
+    // 2. Filter by search query
+    final searchFiltered = query.isEmpty
+        ? statusFiltered
+        : statusFiltered.where((i) => i.name.toLowerCase().contains(query)).toList();
+
+    // 3. Apply Sorting
+    return List.of(searchFiltered)
+      ..sort((a, b) {
+        return switch (sortCriteria) {
+          InventorySortCriteria.expirationDate => a.expirationDate.compareTo(b.expirationDate),
+          InventorySortCriteria.nameAZ => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          InventorySortCriteria.lowStock => a.quantity.compareTo(b.quantity),
+        };
+      });
+  });
+});
+
+
+
+================================================================================
+FILE: lib/features/admin_review/domain/entities/pending_medication_submission.dart
+================================================================================
+
+class PendingMedicationSubmission {
+  final String id;
+  final String proposedName;
+  final String proposedActiveIngredient;
+  final String userId;
+
+  const PendingMedicationSubmission({
+    required this.id,
+    required this.proposedName,
+    required this.proposedActiveIngredient,
+    required this.userId,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'proposedName': proposedName,
+      'proposedActiveIngredient': proposedActiveIngredient,
+      'userId': userId,
+    };
+  }
+
+  factory PendingMedicationSubmission.fromMap(Map<String, dynamic> map) {
+    return PendingMedicationSubmission(
+      id: map['id'] as String,
+      proposedName: map['proposedName'] as String,
+      proposedActiveIngredient: map['proposedActiveIngredient'] as String,
+      userId: map['userId'] as String,
+    );
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/admin_review/data/fakes/fake_pending_submission_repository.dart
+================================================================================
+
+import 'dart:convert';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/admin_review/domain/entities/pending_medication_submission.dart';
+import 'package:smart_meds_v2/features/admin_review/domain/repositories/pending_submission_repository.dart';
+
+class FakePendingSubmissionRepository implements PendingSubmissionRepository {
+  final LocalStorageService _storage;
+  static const String _storageKey = 'admin_pending_submissions';
+
+  final List<PendingMedicationSubmission> _submissions = [];
+  bool _isInitialized = false;
+
+  FakePendingSubmissionRepository(this._storage);
+
+  Future<void> _init() async {
+    if (_isInitialized) return;
+
+    final storedData = _storage.readString(_storageKey);
+    if (storedData != null) {
+      final List<dynamic> decoded = jsonDecode(storedData);
+      _submissions.clear();
+      _submissions.addAll(decoded.map((m) => PendingMedicationSubmission.fromMap(m as Map<String, dynamic>)));
+    } else {
+      // Seed initial data
+      _submissions.addAll([
+        const PendingMedicationSubmission(
+          id: 'sub_1',
+          proposedName: 'Aspirina 500mg',
+          proposedActiveIngredient: 'Ácido Acetilsalicílico',
+          userId: 'user_123',
+        ),
+        const PendingMedicationSubmission(
+          id: 'sub_2',
+          proposedName: 'Tempra Forte',
+          proposedActiveIngredient: 'Paracetamol',
+          userId: 'user_456',
+        ),
+      ]);
+      await _save();
+    }
+    _isInitialized = true;
+  }
+
+  Future<void> _save() async {
+    final String encoded = jsonEncode(_submissions.map((s) => s.toMap()).toList());
+    await _storage.writeString(_storageKey, encoded);
+  }
+
+  @override
+  Future<List<PendingMedicationSubmission>> getPendingSubmissions() async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    return List.unmodifiable(_submissions);
+  }
+
+  @override
+  Future<void> approveSubmission(String id) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _submissions.removeWhere((sub) => sub.id == id);
+    await _save();
+  }
+
+  @override
+  Future<void> rejectSubmission(String id) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _submissions.removeWhere((sub) => sub.id == id);
+    await _save();
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/admin_review/application/providers/admin_review_providers.dart
+================================================================================
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_meds_v2/features/admin_review/application/use_cases/approve_submission_use_case.dart';
+import 'package:smart_meds_v2/features/admin_review/application/use_cases/get_pending_submissions_use_case.dart';
+import 'package:smart_meds_v2/features/admin_review/application/use_cases/reject_submission_use_case.dart';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/admin_review/data/fakes/fake_pending_submission_repository.dart';
+import 'package:smart_meds_v2/features/admin_review/domain/entities/pending_medication_submission.dart';
+import 'package:smart_meds_v2/features/admin_review/domain/repositories/pending_submission_repository.dart';
+
+final pendingSubmissionRepositoryProvider = Provider<PendingSubmissionRepository>((ref) {
+  return FakePendingSubmissionRepository(ref.watch(localStorageServiceProvider));
+});
+
+final getPendingSubmissionsUseCaseProvider = Provider<GetPendingSubmissionsUseCase>((ref) {
+  return GetPendingSubmissionsUseCase(ref.watch(pendingSubmissionRepositoryProvider));
+});
+
+final approveSubmissionUseCaseProvider = Provider<ApproveSubmissionUseCase>((ref) {
+  return ApproveSubmissionUseCase(ref.watch(pendingSubmissionRepositoryProvider));
+});
+
+final rejectSubmissionUseCaseProvider = Provider<RejectSubmissionUseCase>((ref) {
+  return RejectSubmissionUseCase(ref.watch(pendingSubmissionRepositoryProvider));
+});
+
+class AdminReviewNotifier extends AsyncNotifier<List<PendingMedicationSubmission>> {
+  @override
+  Future<List<PendingMedicationSubmission>> build() async {
+    return ref.watch(getPendingSubmissionsUseCaseProvider).execute();
+  }
+
+  Future<void> approve(String id) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(approveSubmissionUseCaseProvider).execute(id);
+      return ref.read(getPendingSubmissionsUseCaseProvider).execute();
+    });
+  }
+
+  Future<void> reject(String id) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(rejectSubmissionUseCaseProvider).execute(id);
+      return ref.read(getPendingSubmissionsUseCaseProvider).execute();
+    });
+  }
+}
+
+final pendingSubmissionsListProvider = AsyncNotifierProvider<AdminReviewNotifier, List<PendingMedicationSubmission>>(() {
+  return AdminReviewNotifier();
+});
+
+
+
+================================================================================
+FILE: lib/features/catalog/domain/entities/catalog_medication.dart
+================================================================================
+
+class CatalogMedication {
+  final String id;
+  final String name;
+  final String activeIngredient;
+
+  const CatalogMedication({
+    required this.id,
+    required this.name,
+    required this.activeIngredient,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'activeIngredient': activeIngredient,
+    };
+  }
+
+  factory CatalogMedication.fromMap(Map<String, dynamic> map) {
+    return CatalogMedication(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      activeIngredient: map['activeIngredient'] as String,
+    );
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/catalog/data/fakes/fake_catalog_repository.dart
+================================================================================
+
+import 'dart:convert';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/catalog/domain/entities/catalog_medication.dart';
+import 'package:smart_meds_v2/features/catalog/domain/repositories/catalog_repository.dart';
+
+class FakeCatalogRepository implements CatalogRepository {
+  final LocalStorageService _storage;
+  static const String _storageKey = 'catalog_medications';
+
+  final List<CatalogMedication> _medications = [];
+  bool _isInitialized = false;
+
+  FakeCatalogRepository(this._storage);
+
+  Future<void> _init() async {
+    if (_isInitialized) return;
+
+    final storedData = _storage.readString(_storageKey);
+    if (storedData != null) {
+      final List<dynamic> decoded = jsonDecode(storedData);
+      _medications.clear();
+      _medications.addAll(decoded.map((m) => CatalogMedication.fromMap(m as Map<String, dynamic>)));
+    } else {
+      // Seed initial data
+      _medications.addAll(const [
+        CatalogMedication(id: 'cat_1', name: 'Paracetamol 500mg', activeIngredient: 'Paracetamol'),
+        CatalogMedication(id: 'cat_2', name: 'Ibuprofeno 400mg', activeIngredient: 'Ibuprofeno'),
+        CatalogMedication(id: 'cat_3', name: 'Loratadina 10mg', activeIngredient: 'Loratadina'),
+        CatalogMedication(id: 'cat_4', name: 'Omeprazol 20mg', activeIngredient: 'Omeprazol'),
+        CatalogMedication(id: 'cat_5', name: 'Amoxicilina 500mg', activeIngredient: 'Amoxicilina'),
+      ]);
+      await _save();
+    }
+    _isInitialized = true;
+  }
+
+  Future<void> _save() async {
+    final String encoded = jsonEncode(_medications.map((m) => m.toMap()).toList());
+    await _storage.writeString(_storageKey, encoded);
+  }
+
+  @override
+  Future<List<CatalogMedication>> searchMedications(String query) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (query.isEmpty) {
+      return List.unmodifiable(_medications);
+    }
+    final lowerQuery = query.toLowerCase();
+    return _medications.where((med) {
+      return med.name.toLowerCase().contains(lowerQuery) ||
+          med.activeIngredient.toLowerCase().contains(lowerQuery);
+    }).toList();
+  }
+
+  @override
+  Future<CatalogMedication?> getMedicationById(String id) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    try {
+      return _medications.firstWhere((med) => med.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
+
+
+================================================================================
+FILE: lib/features/catalog/application/providers/catalog_providers.dart
+================================================================================
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_meds_v2/features/catalog/application/use_cases/get_catalog_medications_use_case.dart';
+import 'package:smart_meds_v2/features/catalog/application/use_cases/search_catalog_medications_use_case.dart';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/catalog/data/fakes/fake_catalog_repository.dart';
+import 'package:smart_meds_v2/features/catalog/domain/entities/catalog_medication.dart';
+import 'package:smart_meds_v2/features/catalog/domain/repositories/catalog_repository.dart';
+
+final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
+  return FakeCatalogRepository(ref.watch(localStorageServiceProvider));
+});
+
+final getCatalogMedicationsUseCaseProvider = Provider<GetCatalogMedicationsUseCase>((ref) {
+  final repository = ref.watch(catalogRepositoryProvider);
+  return GetCatalogMedicationsUseCase(repository);
+});
+
+final searchCatalogMedicationsUseCaseProvider = Provider<SearchCatalogMedicationsUseCase>((ref) {
+  final repository = ref.watch(catalogRepositoryProvider);
+  return SearchCatalogMedicationsUseCase(repository);
+});
+
+class CatalogSearchQueryNotifier extends Notifier<String> {
+  @override
+  String build() => '';
+
+  void updateQuery(String query) {
+    state = query;
+  }
+}
+
+final catalogSearchQueryProvider = NotifierProvider<CatalogSearchQueryNotifier, String>(() {
+  return CatalogSearchQueryNotifier();
+});
+
+final catalogListProvider = FutureProvider<List<CatalogMedication>>((ref) async {
+  final query = ref.watch(catalogSearchQueryProvider);
+  if (query.isEmpty) {
+    return ref.watch(getCatalogMedicationsUseCaseProvider).execute();
+  } else {
+    return ref.watch(searchCatalogMedicationsUseCaseProvider).execute(query);
+  }
+});
+
+
+
+================================================================================
+FILE: test/helpers/test_helpers.dart
+================================================================================
+
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+
+class FakeLocalStorageService implements LocalStorageService {
+  final Map<String, String> _data = {};
+
+  @override
+  String? readString(String key) => _data[key];
+
+  @override
+  Future<void> writeString(String key, String value) async {
+    _data[key] = value;
+  }
+
+  @override
+  Future<void> remove(String key) async {
+    _data.remove(key);
+  }
+}
+
+
+
+================================================================================
+FILE: test/features/intake/intake_controller_test.dart
+================================================================================
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_meds_v2/features/intake/application/providers/intake_providers.dart';
+import 'package:smart_meds_v2/features/intake/application/states/intake_state.dart';
+import 'package:smart_meds_v2/features/intake/domain/entities/intake_capture_result.dart';
+import 'package:smart_meds_v2/features/inventory/application/providers/inventory_providers.dart';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import '../../helpers/test_helpers.dart';
+
+void main() {
+  late ProviderContainer container;
+
+  setUp(() {
+    container = ProviderContainer(
+      overrides: [
+        localStorageServiceProvider.overrideWithValue(FakeLocalStorageService()),
+      ],
+    );
+  });
+
+  tearDown(() {
+    container.dispose();
+  });
+
+  group('IntakeController Tests', () {
+    test('initial state is idle', () {
+      final state = container.read(intakeControllerProvider);
+      expect(state.status, IntakeStatus.idle);
+      expect(state.draftItem, isNull);
+    });
+
+    test('startSimulatedCapture (match) sets state to reviewing and populates draft', () async {
+      final controller = container.read(intakeControllerProvider.notifier);
+      
+      await controller.startSimulatedCapture(source: IntakeSource.barcode);
+      
+      final state = container.read(intakeControllerProvider);
+      expect(state.status, IntakeStatus.reviewing);
+      expect(state.draftItem, isNotNull);
+      expect(state.draftItem!.catalogMedicationId, isNot('desconocido'));
+    });
+
+    test('startSimulatedCapture (no match) sets state to reviewing with fallback name', () async {
+      final controller = container.read(intakeControllerProvider.notifier);
+      
+      await controller.startSimulatedCapture(
+        source: IntakeSource.barcode,
+        forceFallback: true,
+      );
+      
+      final state = container.read(intakeControllerProvider);
+      expect(state.status, IntakeStatus.reviewing);
+      expect(state.draftItem!.catalogMedicationId, 'desconocido');
+      expect(state.draftItem!.name, 'Medicamento Desconocido');
+    });
+
+    test('confirmIntake fails if quantity is less than 1', () async {
+      final controller = container.read(intakeControllerProvider.notifier);
+      
+      await controller.startSimulatedCapture(source: IntakeSource.barcode);
+      controller.updateDraftQuantity(0);
+      
+      await controller.confirmIntake();
+      
+      final state = container.read(intakeControllerProvider);
+      expect(state.status, IntakeStatus.error);
+      expect(state.fieldErrors?['quantity'], isNotNull);
+    });
+
+    test('confirmIntake fails if name is empty', () async {
+      final controller = container.read(intakeControllerProvider.notifier);
+      
+      await controller.startSimulatedCapture(
+        source: IntakeSource.barcode,
+        forceFallback: true,
+      );
+      controller.updateDraftName('');
+      
+      await controller.confirmIntake();
+      
+      final state = container.read(intakeControllerProvider);
+      expect(state.status, IntakeStatus.error);
+      expect(state.fieldErrors?['name'], isNotNull);
+    });
+
+    test('confirmIntake fails if expiration date is in the past', () async {
+      final controller = container.read(intakeControllerProvider.notifier);
+      
+      await controller.startSimulatedCapture(source: IntakeSource.barcode);
+      // Set date to yesterday
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      controller.updateDraftExpiration(yesterday);
+      
+      await controller.confirmIntake();
+      
+      final state = container.read(intakeControllerProvider);
+      expect(state.status, IntakeStatus.error);
+      expect(state.fieldErrors?['expirationDate'], isNotNull);
+    });
+
+    test('confirmIntake adds item to inventory and sets status to confirmed', () async {
+      final controller = container.read(intakeControllerProvider.notifier);
+      
+      await controller.startSimulatedCapture(source: IntakeSource.barcode);
+      final draftItem = container.read(intakeControllerProvider).draftItem!;
+      
+      await controller.confirmIntake();
+      
+      final state = container.read(intakeControllerProvider);
+      expect(state.status, IntakeStatus.confirmed);
+      
+      // Verify it was added to inventory
+      final inventory = await container.read(inventoryListProvider.future);
+      expect(inventory.any((item) => item.name == draftItem.name), isTrue);
+    });
+
+    test('reset clears the state', () async {
+      final controller = container.read(intakeControllerProvider.notifier);
+      
+      await controller.startSimulatedCapture(source: IntakeSource.barcode);
+      controller.reset();
+      
+      final state = container.read(intakeControllerProvider);
+      expect(state.status, IntakeStatus.idle);
+      expect(state.draftItem, isNull);
+    });
+  });
+}
+
+
+
+================================================================================
+FILE: test/widget_test.dart
+================================================================================
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_meds_v2/main.dart' as app;
+
+void main() {
+  testWidgets('Initial screen loads correctly', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await app.main();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Panel Principal'), findsOneWidget);
+    expect(find.text('Catálogo Global'), findsOneWidget);
+  });
+}
+
+
+

@@ -17,40 +17,94 @@ class AdminReviewScreen extends ConsumerWidget {
       body: Column(
         children: [
           const Padding(
-            padding: EdgeInsets.all(16.0),
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: AppSectionTitle(
               title: AppStrings.adminReviewTitle,
-              description: 'Moderar medicamentos propuestos por los usuarios.',
+              description: 'Valida medicamentos propuestos.',
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Expanded(
             child: submissionsState.when(
               data: (submissions) {
                 if (submissions.isEmpty) {
-                  return const Center(
-                    child: Text('No hay revisiones pendientes.'),
-                  );
+                  return _buildEmptyState();
                 }
                 return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: submissions.length,
                   itemBuilder: (context, index) {
                     final sub = submissions[index];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: ListTile(
-                        title: Text(sub.proposedName),
-                        subtitle: Text('Activo: ${sub.proposedActiveIngredient}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: Colors.grey.shade200),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.check, color: Colors.green),
-                              onPressed: () => ref.read(pendingSubmissionsListProvider.notifier).approve(sub.id),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(Icons.rate_review_rounded, color: Colors.amber.shade700),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        sub.proposedName,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Activo: ${sub.proposedActiveIngredient}',
+                                        style: TextStyle(color: Colors.grey.shade600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.close, color: Colors.red),
-                              onPressed: () => ref.read(pendingSubmissionsListProvider.notifier).reject(sub.id),
+                            const Divider(height: 32),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => ref.read(pendingSubmissionsListProvider.notifier).reject(sub.id),
+                                    icon: const Icon(Icons.close, size: 18),
+                                    label: const Text('Rechazar'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                      side: BorderSide(color: Colors.red.shade200),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => ref.read(pendingSubmissionsListProvider.notifier).approve(sub.id),
+                                    icon: const Icon(Icons.check, size: 18),
+                                    label: const Text('Aprobar'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green.shade600,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -64,6 +118,38 @@ class AdminReviewScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.task_alt_rounded, size: 64, color: Colors.green.shade300),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '¡Todo al día!',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No hay medicamentos pendientes de revisión en este momento.',
+              style: TextStyle(color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -3,12 +3,13 @@ import 'package:smart_meds_v2/features/inventory/application/use_cases/add_inven
 import 'package:smart_meds_v2/features/inventory/application/use_cases/get_inventory_items_use_case.dart';
 import 'package:smart_meds_v2/features/inventory/application/use_cases/remove_inventory_item_use_case.dart';
 import 'package:smart_meds_v2/features/inventory/application/use_cases/update_inventory_item_use_case.dart';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
 import 'package:smart_meds_v2/features/inventory/data/fakes/fake_inventory_repository.dart';
 import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
 import 'package:smart_meds_v2/features/inventory/domain/repositories/inventory_repository.dart';
 
 final inventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
-  return FakeInventoryRepository();
+  return FakeInventoryRepository(ref.watch(localStorageServiceProvider));
 });
 
 final getInventoryItemsUseCaseProvider = Provider<GetInventoryItemsUseCase>((ref) {

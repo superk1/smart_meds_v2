@@ -2,12 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_meds_v2/features/admin_review/application/use_cases/approve_submission_use_case.dart';
 import 'package:smart_meds_v2/features/admin_review/application/use_cases/get_pending_submissions_use_case.dart';
 import 'package:smart_meds_v2/features/admin_review/application/use_cases/reject_submission_use_case.dart';
+import 'package:smart_meds_v2/core/services/local_storage_service.dart';
 import 'package:smart_meds_v2/features/admin_review/data/fakes/fake_pending_submission_repository.dart';
 import 'package:smart_meds_v2/features/admin_review/domain/entities/pending_medication_submission.dart';
 import 'package:smart_meds_v2/features/admin_review/domain/repositories/pending_submission_repository.dart';
 
 final pendingSubmissionRepositoryProvider = Provider<PendingSubmissionRepository>((ref) {
-  return FakePendingSubmissionRepository();
+  return FakePendingSubmissionRepository(ref.watch(localStorageServiceProvider));
 });
 
 final getPendingSubmissionsUseCaseProvider = Provider<GetPendingSubmissionsUseCase>((ref) {

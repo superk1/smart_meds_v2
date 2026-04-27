@@ -7,8 +7,22 @@ import 'package:smart_meds_v2/features/intake/domain/entities/intake_capture_res
 import 'package:smart_meds_v2/features/inventory/application/providers/inventory_providers.dart';
 import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
 
+import 'package:smart_meds_v2/features/intake/domain/services/intake_capture_service.dart';
+
 final fakeIntakeCaptureServiceProvider = Provider<FakeIntakeCaptureService>((ref) {
   return FakeIntakeCaptureService();
+});
+
+final barcodeCaptureServiceProvider = Provider<BarcodeCaptureService>((ref) {
+  return ref.watch(fakeIntakeCaptureServiceProvider);
+});
+
+final imageOcrCaptureServiceProvider = Provider<ImageOcrCaptureService>((ref) {
+  return ref.watch(fakeIntakeCaptureServiceProvider);
+});
+
+final manualSearchServiceProvider = Provider<ManualSearchService>((ref) {
+  return ref.watch(fakeIntakeCaptureServiceProvider);
 });
 
 final intakeControllerProvider =
@@ -28,9 +42,17 @@ class IntakeController extends Notifier<IntakeState> {
 
   void dismissError() {
     if (state.draftItem != null) {
-      state = state.copyWith(status: IntakeStatus.reviewing, errorMessage: null);
+      state = state.copyWith(status: IntakeStatus.reviewing, errorMessage: null, fieldErrors: null);
     } else {
       reset();
+    }
+  }
+
+  void clearFieldError(String field) {
+    if (state.fieldErrors != null && state.fieldErrors!.containsKey(field)) {
+      final newErrors = Map<String, String>.from(state.fieldErrors!);
+      newErrors.remove(field);
+      state = state.copyWith(fieldErrors: newErrors.isEmpty ? null : newErrors);
     }
   }
 
@@ -41,20 +63,27 @@ class IntakeController extends Notifier<IntakeState> {
     state = state.copyWith(
       status: IntakeStatus.loading,
       errorMessage: null,
+      fieldErrors: null,
     );
 
     try {
-      final captureService = ref.read(fakeIntakeCaptureServiceProvider);
       IntakeCaptureResult result;
 
       if (source == IntakeSource.barcode) {
-        if (forceFallback) {
-          result = await captureService.simulateBarcodeNoMatch();
-        } else {
-          result = await captureService.simulateBarcodeMatch();
+        final barcodeService = ref.read(barcodeCaptureServiceProvider);
+        // Para simular el fallo, necesitamos acceder al fake si es necesario, 
+        // pero el requerimiento dice "depender de abstracciones".
+        // Como estamos en fase fake, el provider ya nos da el FakeIntakeCaptureService.
+        if (forceFallback && barcodeService is FakeIntakeCaptureService) {
+          barcodeService.setForceNoMatch(true);
+        }
+        result = await barcodeService.scanBarcode();
+        if (forceFallback && barcodeService is FakeIntakeCaptureService) {
+          barcodeService.setForceNoMatch(false);
         }
       } else {
-        result = await captureService.simulateManualSearchMatch('Ibuprofeno');
+        final manualService = ref.read(manualSearchServiceProvider);
+        result = await manualService.searchByText('Ibuprofeno');
       }
 
       await _processCaptureResult(result);
@@ -99,26 +128,37 @@ class IntakeController extends Notifier<IntakeState> {
     final draftItem = state.draftItem;
     if (draftItem == null) return;
 
+    final errors = <String, String>{};
+
     // Validation
     if (draftItem.quantity < 1) {
-      state = state.copyWith(status: IntakeStatus.error, errorMessage: 'La cantidad debe ser al menos 1.');
-      return;
+      errors['quantity'] = 'La cantidad debe ser al menos 1.';
     }
     if (draftItem.name.trim().isEmpty) {
-      state = state.copyWith(status: IntakeStatus.error, errorMessage: 'El nombre del medicamento no puede estar vacío.');
-      return;
+      errors['name'] = 'El nombre no puede estar vacío.';
     }
+    
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final expiration = DateTime(draftItem.expirationDate.year, draftItem.expirationDate.month, draftItem.expirationDate.day);
+    
     if (expiration.isBefore(today)) {
-      state = state.copyWith(status: IntakeStatus.error, errorMessage: 'La fecha de vencimiento no puede ser en el pasado.');
+      errors['expirationDate'] = 'La fecha no puede ser en el pasado.';
+    }
+
+    if (errors.isNotEmpty) {
+      state = state.copyWith(
+        status: IntakeStatus.error,
+        fieldErrors: errors,
+        errorMessage: 'Por favor, corrige los errores antes de continuar.',
+      );
       return;
     }
 
     state = state.copyWith(
       status: IntakeStatus.loading,
       errorMessage: null,
+      fieldErrors: null,
     );
 
     try {
@@ -137,7 +177,9 @@ class IntakeController extends Notifier<IntakeState> {
 
   void updateDraftQuantity(int newQuantity) {
     final currentDraft = state.draftItem;
-    if (currentDraft == null || newQuantity < 1) return;
+    if (currentDraft == null) return;
+    
+    clearFieldError('quantity');
 
     final updatedDraft = InventoryItem(
       id: currentDraft.id,
@@ -154,6 +196,8 @@ class IntakeController extends Notifier<IntakeState> {
     final currentDraft = state.draftItem;
     if (currentDraft == null) return;
 
+    clearFieldError('name');
+
     final updatedDraft = InventoryItem(
       id: currentDraft.id,
       catalogMedicationId: currentDraft.catalogMedicationId,
@@ -168,6 +212,8 @@ class IntakeController extends Notifier<IntakeState> {
   void updateDraftExpiration(DateTime newDate) {
     final currentDraft = state.draftItem;
     if (currentDraft == null) return;
+
+    clearFieldError('expirationDate');
 
     final updatedDraft = InventoryItem(
       id: currentDraft.id,

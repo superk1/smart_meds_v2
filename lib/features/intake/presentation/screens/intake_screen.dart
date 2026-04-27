@@ -98,6 +98,8 @@ class IntakeScreen extends ConsumerWidget {
     if (item == null) return const SizedBox.shrink();
 
     final isDesconocido = item.catalogMedicationId == 'desconocido';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -109,35 +111,12 @@ class IntakeScreen extends ConsumerWidget {
             description: 'Verifica los datos antes de agregar al botiquín.',
           ),
           const SizedBox(height: 16),
-          if (state.source != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    state.source == IntakeSource.barcode
-                        ? Icons.qr_code
-                        : Icons.search,
-                    color: Colors.blue.shade700,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    state.source == IntakeSource.barcode
-                        ? 'Origen: Escaneo de código'
-                        : 'Origen: Búsqueda manual',
-                    style: TextStyle(
-                      color: Colors.blue.shade900,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          
+          if (state.errorMessage != null && state.fieldErrors == null)
+            _buildGeneralError(state.errorMessage!),
+
+          _buildSourceBadge(state.source),
+          
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -149,6 +128,7 @@ class IntakeScreen extends ConsumerWidget {
                     const SizedBox(height: 8),
                     _DraftNameField(
                       initialName: item.name,
+                      errorText: state.fieldErrors?['name'],
                       onNameChanged: controller.updateDraftName,
                     ),
                   ] else ...[
@@ -161,73 +141,88 @@ class IntakeScreen extends ConsumerWidget {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isDesconocido ? Colors.orange.shade100 : Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      isDesconocido ? 'Medicamento manual/desconocido' : 'Identificado en catálogo',
-                      style: TextStyle(
-                        color: isDesconocido ? Colors.orange.shade900 : Colors.green.shade900,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  _buildCatalogStatus(isDesconocido),
+                  const SizedBox(height: 24),
+                  
+                  // Expiration Date Section
+                  const Text('Fecha de vencimiento:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Vencimiento: ${item.expirationDate.toString().split(' ')[0]}',
-                        style: const TextStyle(fontSize: 16),
+                        item.expirationDate.toString().split(' ')[0],
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: state.fieldErrors?['expirationDate'] != null ? Colors.red : null,
+                        ),
                       ),
                       TextButton.icon(
                         onPressed: () async {
                           final date = await showDatePicker(
                             context: context,
-                            initialDate: item.expirationDate,
-                            firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                            lastDate: DateTime.now().add(const Duration(days: 3650)),
+                            initialDate: item.expirationDate.isBefore(today) ? today : item.expirationDate,
+                            firstDate: today,
+                            lastDate: today.add(const Duration(days: 3650)),
                           );
                           if (date != null) {
                             controller.updateDraftExpiration(date);
                           }
                         },
                         icon: const Icon(Icons.calendar_month),
-                        label: const Text('Editar'),
+                        label: const Text('Cambiar'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  if (state.fieldErrors?['expirationDate'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        state.fieldErrors!['expirationDate']!,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
+                    
+                  const SizedBox(height: 24),
+                  
+                  // Quantity Section
+                  const Text('Cantidad:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Text('Cantidad: ', style: TextStyle(fontSize: 16)),
                       IconButton(
                         onPressed: item.quantity > 1
-                            ? () => controller.updateDraftQuantity(
-                                  item.quantity - 1,
-                                )
+                            ? () => controller.updateDraftQuantity(item.quantity - 1)
                             : null,
-                        icon: const Icon(Icons.remove),
+                        icon: const Icon(Icons.remove_circle_outline),
                       ),
-                      Text(
-                        '${item.quantity}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: state.fieldErrors?['quantity'] != null ? Colors.red : Colors.grey.shade300,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${item.quantity}',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
                       IconButton(
-                        onPressed: () => controller.updateDraftQuantity(
-                          item.quantity + 1,
-                        ),
-                        icon: const Icon(Icons.add),
+                        onPressed: () => controller.updateDraftQuantity(item.quantity + 1),
+                        icon: const Icon(Icons.add_circle_outline),
                       ),
                     ],
                   ),
+                  if (state.fieldErrors?['quantity'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        state.fieldErrors!['quantity']!,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -245,12 +240,86 @@ class IntakeScreen extends ConsumerWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: controller.confirmIntake,
-                  child: const Text('Confirmar'),
+                  child: const Text('Confirmar Registro'),
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGeneralError(String message) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: Colors.red.shade700),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSourceBadge(IntakeSource? source) {
+    if (source == null) return const SizedBox.shrink();
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            source == IntakeSource.barcode ? Icons.qr_code : Icons.search,
+            color: Colors.blue.shade700,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            source == IntakeSource.barcode ? 'Origen: Escaneo' : 'Origen: Búsqueda',
+            style: TextStyle(
+              color: Colors.blue.shade900,
+              fontWeight: FontWeight.w500,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCatalogStatus(bool isDesconocido) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDesconocido ? Colors.orange.shade100 : Colors.green.shade100,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        isDesconocido ? 'Medicamento no identificado' : 'Identificado en catálogo',
+        style: TextStyle(
+          color: isDesconocido ? Colors.orange.shade900 : Colors.green.shade900,
+          fontWeight: FontWeight.w500,
+          fontSize: 12,
+        ),
       ),
     );
   }
@@ -293,10 +362,16 @@ class IntakeScreen extends ConsumerWidget {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
-                      Text('Cantidad agregada: ${item.quantity}'),
+                      Text('Cantidad: ${item.quantity} unidades'),
+                      Text('Vencimiento: ${item.expirationDate.toString().split(' ')[0]}'),
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Ya puedes verlo en tu inventario.',
+                style: TextStyle(color: Colors.grey),
               ),
             ],
             const SizedBox(height: 32),
@@ -319,7 +394,7 @@ class IntakeScreen extends ConsumerWidget {
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(50),
               ),
-              child: const Text('Volver al inventario'),
+              child: const Text('Ir al inventario'),
             ),
           ],
         ),
@@ -334,17 +409,17 @@ class IntakeScreen extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error, color: Colors.red, size: 80),
+            const Icon(Icons.error_outline, color: Colors.red, size: 80),
             const SizedBox(height: 16),
             Text(
-              state.errorMessage ?? 'Ocurrió un error en la validación.',
-              style: const TextStyle(fontSize: 18),
+              state.errorMessage ?? 'Ocurrió un error en el flujo.',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: controller.dismissError,
-              child: const Text('Revisar y corregir'),
+              child: const Text('Volver a revisar'),
             ),
           ],
         ),
@@ -355,10 +430,12 @@ class IntakeScreen extends ConsumerWidget {
 
 class _DraftNameField extends StatefulWidget {
   final String initialName;
+  final String? errorText;
   final ValueChanged<String> onNameChanged;
 
   const _DraftNameField({
     required this.initialName,
+    this.errorText,
     required this.onNameChanged,
   });
 
@@ -376,6 +453,14 @@ class _DraftNameFieldState extends State<_DraftNameField> {
   }
 
   @override
+  void didUpdateWidget(_DraftNameField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialName != widget.initialName && _controller.text != widget.initialName) {
+      _controller.text = widget.initialName;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -385,10 +470,11 @@ class _DraftNameFieldState extends State<_DraftNameField> {
   Widget build(BuildContext context) {
     return TextField(
       controller: _controller,
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(),
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(),
         hintText: 'Ingresa el nombre',
         isDense: true,
+        errorText: widget.errorText,
       ),
       onChanged: widget.onNameChanged,
     );

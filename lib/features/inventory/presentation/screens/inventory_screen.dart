@@ -23,36 +23,33 @@ class InventoryScreen extends ConsumerWidget {
       title: AppStrings.inventoryTitle,
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: AppSectionTitle(
-              title: AppStrings.inventoryTitle,
-              description: 'Gestiona tu botiquín personal',
-            ),
-          ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      GoRouter.of(context).push('/intake');
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nuevo Ingreso'),
+                const Expanded(
+                  child: AppSectionTitle(
+                    title: AppStrings.inventoryTitle,
+                    description: 'Tu botiquín personal organizado.',
                   ),
+                ),
+                IconButton.filledTonal(
+                  onPressed: () => context.push('/intake'),
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Nuevo Ingreso',
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          
           // Summary Header
           summaryAsync.when(
             data: (summary) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
                 child: Row(
                   children: [
                     _SummaryCard(
@@ -61,89 +58,75 @@ class InventoryScreen extends ConsumerWidget {
                       icon: Icons.inventory_2,
                       color: Colors.blue,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     _SummaryCard(
                       label: 'Próximos',
                       value: summary['expiringSoon'] ?? 0,
-                      icon: Icons.timer,
+                      icon: Icons.timer_outlined,
                       color: Colors.orange,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     _SummaryCard(
                       label: 'Vencidos',
                       value: summary['expired'] ?? 0,
-                      icon: Icons.warning_amber,
+                      icon: Icons.warning_amber_rounded,
                       color: Colors.red,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     _SummaryCard(
                       label: 'Sin Stock',
                       value: summary['outOfStock'] ?? 0,
-                      icon: Icons.shopping_cart,
-                      color: Colors.grey,
+                      icon: Icons.remove_shopping_cart_outlined,
+                      color: Colors.blueGrey,
                     ),
                   ],
                 ),
               ),
             ),
-            loading: () => const SizedBox.shrink(),
+            loading: () => const SizedBox(height: 80),
             error: (error, _) => const SizedBox.shrink(),
           ),
+          
           const SizedBox(height: 16),
+          
+          // Search and Sort
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: SearchBar(
+                    hintText: 'Buscar por nombre...',
+                    elevation: const WidgetStatePropertyAll(0),
+                    backgroundColor: WidgetStatePropertyAll(Colors.grey.shade100),
+                    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16)),
                     onChanged: (value) => ref.read(inventorySearchQueryProvider.notifier).setQuery(value),
-                    decoration: InputDecoration(
-                      hintText: 'Buscar por nombre...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () => ref.read(inventorySearchQueryProvider.notifier).clearQuery(),
-                            )
-                          : null,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    ),
+                    leading: const Icon(Icons.search, color: Colors.grey),
+                    trailing: [
+                      if (searchQuery.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => ref.read(inventorySearchQueryProvider.notifier).clearQuery(),
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                PopupMenuButton<InventorySortCriteria>(
-                  icon: const Icon(Icons.sort),
-                  tooltip: 'Ordenar por',
-                  onSelected: (criteria) =>
-                      ref.read(inventorySortCriteriaProvider.notifier).setSortCriteria(criteria),
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: InventorySortCriteria.expirationDate,
-                      child: Text('Vencimiento más próximo'),
-                    ),
-                    const PopupMenuItem(
-                      value: InventorySortCriteria.nameAZ,
-                      child: Text('Nombre A-Z'),
-                    ),
-                    const PopupMenuItem(
-                      value: InventorySortCriteria.lowStock,
-                      child: Text('Menor stock primero'),
-                    ),
-                  ],
+                _SortButton(
+                  currentCriteria: ref.watch(inventorySortCriteriaProvider),
+                  onSelected: (criteria) => ref.read(inventorySortCriteriaProvider.notifier).setSortCriteria(criteria),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          
+          const SizedBox(height: 16),
+          
           // Filter Bar
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            clipBehavior: Clip.none,
             child: Row(
               children: [
                 _FilterChip(
@@ -154,7 +137,7 @@ class InventoryScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 _FilterChip(
-                  label: 'Próximos a vencer',
+                  label: 'Próximos',
                   count: baseInventory.whenOrNull(data: (items) => items.where((i) => i.expirationState == ExpirationState.expiringSoon).length),
                   isSelected: activeFilter == InventoryFilter.expiringSoon,
                   onSelected: () => ref.read(inventoryFilterProvider.notifier).setFilter(InventoryFilter.expiringSoon),
@@ -176,7 +159,9 @@ class InventoryScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          
+          const SizedBox(height: 12),
+          
           Expanded(
             child: inventoryState.when(
               data: (items) {
@@ -189,48 +174,12 @@ class InventoryScreen extends ConsumerWidget {
                 }
 
                 return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     final item = items[index];
-                    final expirationState = item.expirationState;
-                    final stockState = item.stockState;
-
-                    return ListTile(
-                      title: Text(
-                        item.name,
-                        style: TextStyle(
-                          color: stockState == StockState.outOfStock ? Colors.grey : null,
-                          decoration: stockState == StockState.outOfStock ? TextDecoration.lineThrough : null,
-                        ),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Cantidad: ${item.quantity} | Expira: ${item.expirationDate.toString().split(' ')[0]}',
-                            style: TextStyle(
-                              color: stockState == StockState.outOfStock ? Colors.grey : null,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            children: [
-                              _buildExpirationBadge(expirationState),
-                              _buildStockBadge(stockState),
-                            ],
-                          ),
-                        ],
-                      ),
-                      leading: CircleAvatar(
-                        backgroundColor: stockState == StockState.outOfStock ? Colors.grey.shade200 : null,
-                        child: Icon(
-                          Icons.inventory_2,
-                          color: stockState == StockState.outOfStock ? Colors.grey : null,
-                        ),
-                      ),
-                      isThreeLine: true,
+                    return _InventoryItemCard(
+                      item: item,
                       onTap: () {
                         showModalBottomSheet(
                           context: context,
@@ -239,51 +188,15 @@ class InventoryScreen extends ConsumerWidget {
                           builder: (context) => InventoryDetailSheet(itemId: item.id),
                         );
                       },
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'use') {
-                            ref.read(inventoryListProvider.notifier).useItem(item);
-                          } else if (value == 'restock') {
-                            ref.read(inventoryListProvider.notifier).restockItem(item);
-                          } else if (value == 'discard') {
-                            ref.read(inventoryListProvider.notifier).discardItem(item.id);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'use',
-                            enabled: item.quantity > 0,
-                            child: const Row(
-                              children: [
-                                Icon(Icons.remove_circle_outline, size: 20),
-                                SizedBox(width: 8),
-                                Text('Usar 1'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'restock',
-                            child: Row(
-                              children: [
-                                Icon(Icons.add_circle_outline, size: 20),
-                                SizedBox(width: 8),
-                                Text('Reponer 1'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(
-                            value: 'discard',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Descartar', style: TextStyle(color: Colors.red)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                      onAction: (action) {
+                        if (action == 'use') {
+                          ref.read(inventoryListProvider.notifier).useItem(item);
+                        } else if (action == 'restock') {
+                          ref.read(inventoryListProvider.notifier).restockItem(item);
+                        } else if (action == 'discard') {
+                          ref.read(inventoryListProvider.notifier).discardItem(item.id);
+                        }
+                      },
                     );
                   },
                 );
@@ -302,145 +215,201 @@ class InventoryScreen extends ConsumerWidget {
     String query,
     List<InventoryItem> baseItems,
   ) {
-    if (baseItems.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'Tu inventario está vacío',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Agrega medicamentos usando el botón superior.',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (query.isNotEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.search_off, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text(
-              'Sin coincidencias',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'No encontramos resultados para "$query"',
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
     String title;
     String description;
     IconData icon;
+    Color iconColor = Colors.grey.shade400;
 
-    switch (filter) {
-      case InventoryFilter.all:
-        title = 'Tu inventario está vacío';
-        description = 'Agrega medicamentos usando el botón superior.';
-        icon = Icons.inventory_2_outlined;
-        break;
-      case InventoryFilter.expiringSoon:
-        title = 'Sin alertas próximas';
-        description = 'No tienes medicamentos próximos a vencer.';
-        icon = Icons.notifications_none;
-        break;
-      case InventoryFilter.expired:
-        title = 'Todo vigente';
-        description = 'No tienes medicamentos vencidos.';
-        icon = Icons.check_circle_outline;
-        break;
-      case InventoryFilter.outOfStock:
-        title = 'Stock completo';
-        description = 'No tienes medicamentos sin stock.';
-        icon = Icons.shopping_basket_outlined;
-        break;
+    if (baseItems.isEmpty) {
+      title = 'Tu botiquín está vacío';
+      description = 'Comienza agregando los medicamentos que tienes en casa.';
+      icon = Icons.inventory_2_outlined;
+    } else if (query.isNotEmpty) {
+      title = 'Sin coincidencias';
+      description = 'No encontramos nada que coincida con "$query"';
+      icon = Icons.search_off_rounded;
+    } else {
+      switch (filter) {
+        case InventoryFilter.all:
+          title = 'Nada por aquí';
+          description = 'Tu inventario parece estar vacío.';
+          icon = Icons.inventory_2_outlined;
+          break;
+        case InventoryFilter.expiringSoon:
+          title = 'Sin alertas próximas';
+          description = 'No tienes medicamentos próximos a vencer. ¡Excelente!';
+          icon = Icons.timer_outlined;
+          iconColor = Colors.orange.shade200;
+          break;
+        case InventoryFilter.expired:
+          title = 'Todo vigente';
+          description = 'No tienes medicamentos vencidos en este filtro.';
+          icon = Icons.verified_user_outlined;
+          iconColor = Colors.green.shade200;
+          break;
+        case InventoryFilter.outOfStock:
+          title = 'Stock completo';
+          description = 'No tienes medicamentos agotados. ¡Bien hecho!';
+          icon = Icons.check_circle_outline_rounded;
+          iconColor = Colors.blue.shade200;
+          break;
+      }
     }
 
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            description,
-            style: const TextStyle(color: Colors.grey),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: iconColor.withAlpha(30),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 64, color: iconColor),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              description,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  Widget _buildExpirationBadge(ExpirationState state) {
-    String text;
-    Color color;
-    Color bgColor;
+class _InventoryItemCard extends StatelessWidget {
+  final InventoryItem item;
+  final VoidCallback onTap;
+  final ValueChanged<String> onAction;
 
-    switch (state) {
-      case ExpirationState.valid:
-        text = 'Vigente';
-        color = Colors.green.shade700;
-        bgColor = Colors.green.shade50;
-        break;
-      case ExpirationState.expiringSoon:
-        text = 'Próximo a vencer';
-        color = Colors.orange.shade700;
-        bgColor = Colors.orange.shade50;
-        break;
-      case ExpirationState.expired:
-        text = 'Vencido';
-        color = Colors.red.shade700;
-        bgColor = Colors.red.shade50;
-        break;
-    }
+  const _InventoryItemCard({
+    required this.item,
+    required this.onTap,
+    required this.onAction,
+  });
 
-    return _Badge(text: text, color: color, bgColor: bgColor);
-  }
+  @override
+  Widget build(BuildContext context) {
+    final stockState = item.stockState;
+    final expirationState = item.expirationState;
+    final isOutOfStock = stockState == StockState.outOfStock;
 
-  Widget _buildStockBadge(StockState state) {
-    String text;
-    Color color;
-    Color bgColor;
-
-    switch (state) {
-      case StockState.inStock:
-        text = 'Stock suficiente';
-        color = Colors.blue.shade700;
-        bgColor = Colors.blue.shade50;
-        break;
-      case StockState.lowStock:
-        text = 'Stock bajo';
-        color = Colors.orange.shade700;
-        bgColor = Colors.orange.shade50;
-        break;
-      case StockState.outOfStock:
-        text = 'Sin stock';
-        color = Colors.grey.shade700;
-        bgColor = Colors.grey.shade50;
-        break;
-    }
-
-    return _Badge(text: text, color: color, bgColor: bgColor);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isOutOfStock ? Colors.grey.shade100 : Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.medication_rounded,
+                  color: isOutOfStock ? Colors.grey.shade400 : Colors.blue.shade600,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isOutOfStock ? Colors.grey : Colors.black87,
+                        decoration: isOutOfStock ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.quantity} unidades • Expira: ${item.expirationDate.toString().split(' ')[0]}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        _ExpirationBadge(state: expirationState),
+                        _StockBadge(state: stockState),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: Colors.grey),
+                onSelected: onAction,
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'use',
+                    enabled: item.quantity > 0,
+                    child: const Row(
+                      children: [
+                        Icon(Icons.remove_circle_outline, size: 20),
+                        SizedBox(width: 8),
+                        Text('Usar 1'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'restock',
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_circle_outline, size: 20),
+                        SizedBox(width: 8),
+                        Text('Reponer 1'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'discard',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Descartar', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -460,36 +429,32 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      width: 100,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withAlpha(40)),
+        color: color.withAlpha(15),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withAlpha(30)),
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 4),
-              Text(
-                value.toString(),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
+          Icon(icon, size: 20, color: color),
+          const SizedBox(height: 8),
+          Text(
+            value.toString(),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: color.withAlpha(200),
+              color: color.withAlpha(180),
             ),
           ),
         ],
@@ -498,32 +463,85 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _Badge extends StatelessWidget {
+class _ExpirationBadge extends StatelessWidget {
+  final ExpirationState state;
+
+  const _ExpirationBadge({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    String text;
+    Color color;
+
+    switch (state) {
+      case ExpirationState.valid:
+        text = 'Vigente';
+        color = Colors.green;
+        break;
+      case ExpirationState.expiringSoon:
+        text = 'Pronto a vencer';
+        color = Colors.orange;
+        break;
+      case ExpirationState.expired:
+        text = 'Vencido';
+        color = Colors.red;
+        break;
+    }
+
+    return _MiniBadge(text: text, color: color);
+  }
+}
+
+class _StockBadge extends StatelessWidget {
+  final StockState state;
+
+  const _StockBadge({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    String text;
+    Color color;
+
+    switch (state) {
+      case StockState.inStock:
+        text = 'Stock OK';
+        color = Colors.blue;
+        break;
+      case StockState.lowStock:
+        text = 'Stock bajo';
+        color = Colors.orange;
+        break;
+      case StockState.outOfStock:
+        text = 'Agotado';
+        color = Colors.grey;
+        break;
+    }
+
+    return _MiniBadge(text: text, color: color);
+  }
+}
+
+class _MiniBadge extends StatelessWidget {
   final String text;
   final Color color;
-  final Color bgColor;
 
-  const _Badge({
-    required this.text,
-    required this.color,
-    required this.bgColor,
-  });
+  const _MiniBadge({required this.text, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(76)),
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withAlpha(40)),
       ),
       child: Text(
         text,
         style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
+          color: color.withAlpha(220),
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );
@@ -545,33 +563,69 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label),
-          if (count != null) ...[
-            const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.white.withAlpha(50) : Colors.black12,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                count.toString(),
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isSelected ? Colors.white : Colors.black54,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+    return FilterChip(
+      label: Text(label),
       selected: isSelected,
       onSelected: (_) => onSelected(),
+      avatar: count != null ? CircleAvatar(
+        radius: 10,
+        backgroundColor: isSelected ? Colors.white.withAlpha(50) : Colors.black.withAlpha(20),
+        child: Text(
+          count.toString(),
+          style: TextStyle(
+            fontSize: 9,
+            color: isSelected ? Colors.white : Colors.black54,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ) : null,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      side: BorderSide(color: isSelected ? Colors.transparent : Colors.grey.shade300),
+      backgroundColor: Colors.white,
+      selectedColor: Theme.of(context).primaryColor,
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.white : Colors.black87,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
+    );
+  }
+}
+
+class _SortButton extends StatelessWidget {
+  final InventorySortCriteria currentCriteria;
+  final ValueChanged<InventorySortCriteria> onSelected;
+
+  const _SortButton({
+    required this.currentCriteria,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: PopupMenuButton<InventorySortCriteria>(
+        icon: const Icon(Icons.sort_rounded, color: Colors.black54),
+        tooltip: 'Ordenar',
+        onSelected: onSelected,
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: InventorySortCriteria.expirationDate,
+            child: Text('Vencimiento'),
+          ),
+          const PopupMenuItem(
+            value: InventorySortCriteria.nameAZ,
+            child: Text('Nombre A-Z'),
+          ),
+          const PopupMenuItem(
+            value: InventorySortCriteria.lowStock,
+            child: Text('Stock bajo'),
+          ),
+        ],
+      ),
     );
   }
 }
