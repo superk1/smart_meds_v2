@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "_future_local_services_": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "echo",
+        "Servidores MCP pendientes para fases futuras"
+      ],
+      "env": {
+        "CODINGBUDDY_PROJECT_ROOT": "D:\\proyectos\\smart_meds_V2"
+      },
+      "disabled": true
+    }
+  }
+}
