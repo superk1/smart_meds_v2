@@ -466,10 +466,19 @@ class _BackupSection extends ConsumerWidget {
                   Expanded(
                     child: TextButton(
                       onPressed: () => ref.read(inventoryBackupControllerProvider.notifier).createManualBackup(),
-                      child: const Text('Backup manual'),
+                      child: const Text('Backup local'),
                     ),
                   ),
                 ],
+              ),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.import_export, color: Colors.blue),
+                title: const Text('Exportar / Importar archivo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                subtitle: const Text('Comparte o carga un archivo JSON de tu botiquín.', style: TextStyle(fontSize: 11)),
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () => context.push('/export-import'),
               ),
             ] else ...[
               const Text(
@@ -482,7 +491,16 @@ class _BackupSection extends ConsumerWidget {
                 child: ElevatedButton.icon(
                   onPressed: () => ref.read(inventoryBackupControllerProvider.notifier).createManualBackup(),
                   icon: const Icon(Icons.add_to_photos_outlined),
-                  label: const Text('Crear respaldo ahora'),
+                  label: const Text('Crear respaldo local'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push('/export-import'),
+                  icon: const Icon(Icons.import_export),
+                  label: const Text('Exportar / Importar JSON'),
                 ),
               ),
             ],

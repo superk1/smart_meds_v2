@@ -11,6 +11,7 @@ import 'package:smart_meds_v2/features/inventory/presentation/screens/inventory_
 import 'package:smart_meds_v2/features/inventory/presentation/screens/inventory_screen.dart';
 import 'package:smart_meds_v2/features/ocr/presentation/screens/ocr_screen.dart';
 import 'package:smart_meds_v2/features/inventory/presentation/screens/alerts_screen.dart';
+import 'package:smart_meds_v2/features/inventory/presentation/screens/export_import_screen.dart';
 import 'package:smart_meds_v2/features/settings/presentation/screens/settings_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -51,6 +52,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             },
           ),
         ],
+      ),
+      GoRoute(
+        path: '/export-import',
+        builder: (context, state) => const ExportImportScreen(),
       ),
       GoRoute(
         path: '/intake',
