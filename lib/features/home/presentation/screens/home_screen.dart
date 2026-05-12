@@ -361,7 +361,7 @@ class _UserSessionPanel extends ConsumerWidget {
                             style: TextStyle(fontSize: 11, color: Colors.teal.shade600),
                           ),
                           loading: () => const SizedBox.shrink(),
-                          error: (_, __) => Text(
+                          error: (error, stack) => Text(
                             'Error al obtener fecha sync',
                             style: TextStyle(fontSize: 11, color: Colors.red.shade400),
                           ),
