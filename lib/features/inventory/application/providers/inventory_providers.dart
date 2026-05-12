@@ -7,6 +7,9 @@ import 'package:smart_meds_v2/core/services/local_storage_service.dart';
 import 'package:smart_meds_v2/features/inventory/data/fakes/fake_inventory_repository.dart';
 import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
 import 'package:smart_meds_v2/features/inventory/domain/repositories/inventory_repository.dart';
+import 'package:smart_meds_v2/features/inventory/application/providers/notification_preferences_provider.dart';
+import 'package:smart_meds_v2/features/inventory/application/providers/reminder_providers.dart';
+import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_reminder.dart';
 
 // UI State Provider for Highlighting Cards
 class InventoryHighlightNotifier extends Notifier<String?> {
@@ -67,8 +70,43 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await ref.read(updateInventoryItemUseCaseProvider).execute(updatedItem);
+      _checkAndNotifyHealth(updatedItem);
       return ref.read(getInventoryItemsUseCaseProvider).execute();
     });
+  }
+
+  void _checkAndNotifyHealth(InventoryItem item) {
+    final prefs = ref.read(notificationPreferencesProvider);
+    
+    // Auto-alert for low stock
+    if (prefs.stockAlertsEnabled && item.quantity == 2) {
+      ref.read(notificationServiceProvider).scheduleReminder(
+        InventoryReminder(
+          id: 'auto_stock_${item.id}',
+          inventoryItemId: item.id,
+          type: ReminderType.stock,
+          targetQuantity: 2,
+          isActive: true,
+          createdAt: DateTime.now(),
+        ),
+        item.name,
+      );
+    }
+    
+    // Auto-alert for out of stock
+    if (prefs.stockAlertsEnabled && item.quantity == 0) {
+      ref.read(notificationServiceProvider).scheduleReminder(
+        InventoryReminder(
+          id: 'auto_out_${item.id}',
+          inventoryItemId: item.id,
+          type: ReminderType.stock,
+          targetQuantity: 0,
+          isActive: true,
+          createdAt: DateTime.now(),
+        ),
+        item.name,
+      );
+    }
   }
 
   Future<void> restockItem(InventoryItem item) async {
