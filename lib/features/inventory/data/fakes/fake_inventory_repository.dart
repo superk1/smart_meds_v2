@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:smart_meds_v2/core/services/local_storage_service.dart';
 import 'package:smart_meds_v2/features/inventory/data/models/inventory_item_model.dart';
 import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
+import 'package:smart_meds_v2/features/catalog/domain/constants/catalog_constants.dart';
 import 'package:smart_meds_v2/features/inventory/domain/repositories/inventory_repository.dart';
 
 class FakeInventoryRepository implements InventoryRepository {
@@ -92,7 +93,7 @@ class FakeInventoryRepository implements InventoryRepository {
 
     // Rule: Combine duplicates
     int existingIndex = -1;
-    if (item.catalogMedicationId != 'desconocido') {
+    if (item.catalogMedicationId != CatalogConstants.unknownId) {
       existingIndex = _items.indexWhere(
         (i) => i.catalogMedicationId == item.catalogMedicationId &&
                i.expirationDate.year == item.expirationDate.year &&
@@ -102,7 +103,7 @@ class FakeInventoryRepository implements InventoryRepository {
     } else {
       final normalizedNew = _normalizeName(item.name);
       existingIndex = _items.indexWhere(
-        (i) => i.catalogMedicationId == 'desconocido' &&
+        (i) => i.catalogMedicationId == CatalogConstants.unknownId &&
                _normalizeName(i.name) == normalizedNew &&
                i.expirationDate.year == item.expirationDate.year &&
                i.expirationDate.month == item.expirationDate.month &&
@@ -145,6 +146,15 @@ class FakeInventoryRepository implements InventoryRepository {
     await _init();
     await Future.delayed(const Duration(milliseconds: 100));
     _items.removeWhere((item) => item.id == id);
+    await _save();
+  }
+
+  @override
+  Future<void> saveAllInventory(List<InventoryItem> items) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _items.clear();
+    _items.addAll(items);
     await _save();
   }
 }

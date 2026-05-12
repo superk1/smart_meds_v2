@@ -1,3 +1,4 @@
+import 'package:smart_meds_v2/features/catalog/domain/constants/catalog_constants.dart';
 import 'package:smart_meds_v2/features/intake/domain/entities/intake_capture_result.dart';
 import 'package:smart_meds_v2/features/intake/domain/services/intake_capture_service.dart';
 
@@ -42,7 +43,7 @@ class FakeIntakeCaptureService implements BarcodeCaptureService, ImageOcrCapture
     
     return const IntakeCaptureResult(
       source: IntakeSource.barcode,
-      fallbackName: 'Medicamento Desconocido',
+      fallbackName: CatalogConstants.unknownName,
       scannedCode: '9999999999999',
     );
   }

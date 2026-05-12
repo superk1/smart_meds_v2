@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_meds_v2/core/constants/app_strings.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/inventory_providers.dart';
+import 'package:smart_meds_v2/features/inventory/application/providers/reminder_providers.dart';
+import 'package:smart_meds_v2/features/inventory/application/providers/alert_center_providers.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_scaffold.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_section_title.dart';
-import 'package:smart_meds_v2/features/inventory/presentation/widgets/inventory_detail_sheet.dart';
 
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
@@ -18,6 +19,17 @@ class InventoryScreen extends ConsumerWidget {
     final baseInventory = ref.watch(inventoryListProvider);
     final searchQuery = ref.watch(inventorySearchQueryProvider);
     final summaryAsync = ref.watch(inventorySummaryProvider);
+    final highlightId = ref.watch(inventoryHighlightProvider);
+
+    ref.listen(inventoryHighlightProvider, (previous, next) {
+      if (next != null) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (ref.read(inventoryHighlightProvider) == next) {
+            ref.read(inventoryHighlightProvider.notifier).setHighlight(null);
+          }
+        });
+      }
+    });
 
     return AppScaffold(
       title: AppStrings.inventoryTitle,
@@ -34,6 +46,8 @@ class InventoryScreen extends ConsumerWidget {
                     description: 'Tu botiquín personal organizado.',
                   ),
                 ),
+                _AlertCenterButton(),
+                const SizedBox(width: 4),
                 IconButton.filledTonal(
                   onPressed: () => context.push('/intake'),
                   icon: const Icon(Icons.add),
@@ -74,10 +88,17 @@ class InventoryScreen extends ConsumerWidget {
                     ),
                     const SizedBox(width: 12),
                     _SummaryCard(
-                      label: 'Sin Stock',
-                      value: summary['outOfStock'] ?? 0,
-                      icon: Icons.remove_shopping_cart_outlined,
+                      label: 'Stock Bajo',
+                      value: summary['lowStock'] ?? 0,
+                      icon: Icons.shopping_cart_checkout,
                       color: Colors.blueGrey,
+                    ),
+                    const SizedBox(width: 12),
+                    _SummaryCard(
+                      label: 'Recordatorios',
+                      value: ref.watch(reminderListProvider).value?.where((r) => r.isActive).length ?? 0,
+                      icon: Icons.notifications_active_outlined,
+                      color: Colors.indigo,
                     ),
                   ],
                 ),
@@ -113,8 +134,8 @@ class InventoryScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 _SortButton(
-                  currentCriteria: ref.watch(inventorySortCriteriaProvider),
-                  onSelected: (criteria) => ref.read(inventorySortCriteriaProvider.notifier).setSortCriteria(criteria),
+                  currentSort: ref.watch(inventorySortProvider),
+                  onSelected: (sort) => ref.read(inventorySortProvider.notifier).setSort(sort),
                 ),
               ],
             ),
@@ -151,10 +172,10 @@ class InventoryScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 _FilterChip(
-                  label: 'Sin stock',
-                  count: baseInventory.whenOrNull(data: (items) => items.where((i) => i.stockState == StockState.outOfStock).length),
-                  isSelected: activeFilter == InventoryFilter.outOfStock,
-                  onSelected: () => ref.read(inventoryFilterProvider.notifier).setFilter(InventoryFilter.outOfStock),
+                  label: 'Stock bajo',
+                  count: baseInventory.whenOrNull(data: (items) => items.where((i) => i.quantity <= 2).length),
+                  isSelected: activeFilter == InventoryFilter.lowStock,
+                  onSelected: () => ref.read(inventoryFilterProvider.notifier).setFilter(InventoryFilter.lowStock),
                 ),
               ],
             ),
@@ -180,14 +201,8 @@ class InventoryScreen extends ConsumerWidget {
                     final item = items[index];
                     return _InventoryItemCard(
                       item: item,
-                      onTap: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (context) => InventoryDetailSheet(itemId: item.id),
-                        );
-                      },
+                      isHighlighted: highlightId == item.id,
+                      onTap: () => context.push('/inventory/${item.id}'),
                       onAction: (action) {
                         if (action == 'use') {
                           ref.read(inventoryListProvider.notifier).useItem(item);
@@ -247,9 +262,9 @@ class InventoryScreen extends ConsumerWidget {
           icon = Icons.verified_user_outlined;
           iconColor = Colors.green.shade200;
           break;
-        case InventoryFilter.outOfStock:
+        case InventoryFilter.lowStock:
           title = 'Stock completo';
-          description = 'No tienes medicamentos agotados. ¡Bien hecho!';
+          description = 'No tienes medicamentos con stock bajo. ¡Bien hecho!';
           icon = Icons.check_circle_outline_rounded;
           iconColor = Colors.blue.shade200;
           break;
@@ -293,11 +308,13 @@ class _InventoryItemCard extends StatelessWidget {
   final InventoryItem item;
   final VoidCallback onTap;
   final ValueChanged<String> onAction;
+  final bool isHighlighted;
 
   const _InventoryItemCard({
     required this.item,
     required this.onTap,
     required this.onAction,
+    this.isHighlighted = false,
   });
 
   @override
@@ -309,9 +326,13 @@ class _InventoryItemCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
+      color: isHighlighted ? Colors.indigo.shade50 : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+        side: BorderSide(
+          color: isHighlighted ? Colors.indigo.shade300 : Colors.grey.shade200,
+          width: isHighlighted ? 2.0 : 1.0,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -355,6 +376,8 @@ class _InventoryItemCard extends StatelessWidget {
                         color: Colors.grey.shade600,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    _ReminderBadge(itemId: item.id),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -592,11 +615,11 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _SortButton extends StatelessWidget {
-  final InventorySortCriteria currentCriteria;
-  final ValueChanged<InventorySortCriteria> onSelected;
+  final InventorySort currentSort;
+  final ValueChanged<InventorySort> onSelected;
 
   const _SortButton({
-    required this.currentCriteria,
+    required this.currentSort,
     required this.onSelected,
   });
 
@@ -607,25 +630,99 @@ class _SortButton extends StatelessWidget {
         color: Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: PopupMenuButton<InventorySortCriteria>(
+      child: PopupMenuButton<InventorySort>(
         icon: const Icon(Icons.sort_rounded, color: Colors.black54),
         tooltip: 'Ordenar',
         onSelected: onSelected,
         itemBuilder: (context) => [
           const PopupMenuItem(
-            value: InventorySortCriteria.expirationDate,
+            value: InventorySort.byExpiryDate,
             child: Text('Vencimiento'),
           ),
           const PopupMenuItem(
-            value: InventorySortCriteria.nameAZ,
+            value: InventorySort.byName,
             child: Text('Nombre A-Z'),
-          ),
-          const PopupMenuItem(
-            value: InventorySortCriteria.lowStock,
-            child: Text('Stock bajo'),
           ),
         ],
       ),
     );
   }
 }
+
+class _ReminderBadge extends ConsumerWidget {
+  final String itemId;
+  const _ReminderBadge({required this.itemId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final alerts = ref.watch(activeAlertsProvider);
+    final hasAlert = alerts.any((r) => r.inventoryItemId == itemId);
+
+    if (!hasAlert) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.indigo.shade50,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.indigo.shade200),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.notifications_active, size: 12, color: Colors.indigo),
+          SizedBox(width: 4),
+          Text(
+            'Recordatorio activo',
+            style: TextStyle(
+              color: Colors.indigo,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AlertCenterButton extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final alertCount = ref.watch(alertCenterCountProvider);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: () => context.push('/alerts'),
+          icon: const Icon(Icons.notifications_outlined),
+          tooltip: 'Centro de alertas',
+        ),
+        if (alertCount > 0)
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              child: Text(
+                alertCount > 9 ? '9+' : '$alertCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+

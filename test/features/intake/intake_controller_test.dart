@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_meds_v2/features/intake/application/providers/intake_providers.dart';
 import 'package:smart_meds_v2/features/intake/application/states/intake_state.dart';
 import 'package:smart_meds_v2/features/intake/domain/entities/intake_capture_result.dart';
+import 'package:smart_meds_v2/features/catalog/application/providers/catalog_providers.dart';
+import 'package:smart_meds_v2/features/catalog/data/fakes/fake_catalog_repository.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/inventory_providers.dart';
 import 'package:smart_meds_v2/core/services/local_storage_service.dart';
+import 'package:smart_meds_v2/features/admin_review/application/providers/admin_review_providers.dart';
+import 'package:smart_meds_v2/features/admin_review/data/fakes/fake_pending_submission_repository.dart';
 import '../../helpers/test_helpers.dart';
 
 void main() {
@@ -14,6 +18,12 @@ void main() {
     container = ProviderContainer(
       overrides: [
         localStorageServiceProvider.overrideWithValue(FakeLocalStorageService()),
+        catalogRepositoryProvider.overrideWith((ref) {
+          return FakeCatalogRepository(ref.watch(localStorageServiceProvider));
+        }),
+        pendingSubmissionRepositoryProvider.overrideWith((ref) {
+          return FakePendingSubmissionRepository(ref.watch(localStorageServiceProvider));
+        }),
       ],
     );
   });

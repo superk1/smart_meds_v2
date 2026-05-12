@@ -10,11 +10,24 @@ enum StockState {
   outOfStock,
 }
 
+/// Representa un medicamento físico dentro del botiquín privado del usuario.
+/// 
+/// Pertenece al **Dominio Privado**.
 class InventoryItem {
+  /// Identificador único del registro en el inventario local.
   final String id;
+
+  /// Referencia al ID del catálogo global. 
+  /// Si no hay match, debe ser [CatalogConstants.unknownId].
   final String catalogMedicationId;
+
+  /// Nombre legible para el usuario.
   final String name;
+
+  /// Fecha de vencimiento del lote específico.
   final DateTime expirationDate;
+
+  /// Unidades disponibles en el botiquín.
   final int quantity;
 
   const InventoryItem({
@@ -45,7 +58,7 @@ class InventoryItem {
   StockState get stockState {
     if (quantity <= 0) {
       return StockState.outOfStock;
-    } else if (quantity == 1) {
+    } else if (quantity <= 2) {
       return StockState.lowStock;
     } else {
       return StockState.inStock;

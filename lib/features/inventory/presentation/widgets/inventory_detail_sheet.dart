@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_meds_v2/features/catalog/domain/constants/catalog_constants.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/inventory_providers.dart';
 import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
 
@@ -28,7 +29,7 @@ class InventoryDetailSheet extends ConsumerWidget {
 
         final expirationState = item.expirationState;
         final stockState = item.stockState;
-        final isManual = item.catalogMedicationId == 'desconocido';
+        final isManual = item.catalogMedicationId == CatalogConstants.unknownId;
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),

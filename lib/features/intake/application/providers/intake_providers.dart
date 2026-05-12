@@ -6,8 +6,10 @@ import 'package:smart_meds_v2/features/intake/data/fakes/fake_intake_capture_ser
 import 'package:smart_meds_v2/features/intake/domain/entities/intake_capture_result.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/inventory_providers.dart';
 import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
-
+import 'package:smart_meds_v2/features/catalog/domain/constants/catalog_constants.dart';
 import 'package:smart_meds_v2/features/intake/domain/services/intake_capture_service.dart';
+import 'package:smart_meds_v2/features/admin_review/application/providers/admin_review_providers.dart';
+import 'package:smart_meds_v2/features/admin_review/domain/entities/pending_medication_submission.dart';
 
 final fakeIntakeCaptureServiceProvider = Provider<FakeIntakeCaptureService>((ref) {
   return FakeIntakeCaptureService();
@@ -96,8 +98,8 @@ class IntakeController extends Notifier<IntakeState> {
   }
 
   Future<void> _processCaptureResult(IntakeCaptureResult result) async {
-    String medicationName = result.fallbackName ?? 'Medicamento Desconocido';
-    String catalogId = 'desconocido';
+    String medicationName = result.fallbackName ?? CatalogConstants.unknownName;
+    String catalogId = CatalogConstants.unknownId;
 
     if (result.hasCatalogMatch) {
       final catalogRepo = ref.read(catalogRepositoryProvider);
@@ -162,7 +164,20 @@ class IntakeController extends Notifier<IntakeState> {
     );
 
     try {
+      // 1. Add to local inventory (always)
       await ref.read(inventoryListProvider.notifier).addItem(draftItem);
+
+      // 2. If it's an unknown medication, submit for moderation
+      if (draftItem.catalogMedicationId == CatalogConstants.unknownId) {
+        final submission = PendingMedicationSubmission(
+          id: 'sub_${DateTime.now().millisecondsSinceEpoch}',
+          proposedName: draftItem.name,
+          proposedActiveIngredient: 'Desconocido', // Or capture this from UI if available
+          userId: 'user_local', // Placeholder until Auth is implemented
+        );
+        
+        await ref.read(pendingSubmissionRepositoryProvider).submitForReview(submission);
+      }
 
       state = state.copyWith(
         status: IntakeStatus.confirmed,
@@ -170,7 +185,7 @@ class IntakeController extends Notifier<IntakeState> {
     } catch (e) {
       state = state.copyWith(
         status: IntakeStatus.error,
-        errorMessage: 'Error al guardar en el inventario.',
+        errorMessage: 'Error al procesar el ingreso: $e',
       );
     }
   }

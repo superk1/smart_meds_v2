@@ -5,4 +5,5 @@ abstract class InventoryRepository {
   Future<void> addInventoryItem(InventoryItem item);
   Future<void> updateInventoryItem(InventoryItem item);
   Future<void> removeInventoryItem(String id);
+  Future<void> saveAllInventory(List<InventoryItem> items);
 }

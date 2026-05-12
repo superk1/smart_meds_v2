@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:smart_meds_v2/features/intake/application/providers/intake_providers.dart';
 import 'package:smart_meds_v2/features/intake/application/states/intake_state.dart';
 import 'package:smart_meds_v2/features/intake/domain/entities/intake_capture_result.dart';
+import 'package:smart_meds_v2/features/catalog/domain/constants/catalog_constants.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_scaffold.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_section_title.dart';
 
@@ -97,7 +98,7 @@ class IntakeScreen extends ConsumerWidget {
     final item = state.draftItem;
     if (item == null) return const SizedBox.shrink();
 
-    final isDesconocido = item.catalogMedicationId == 'desconocido';
+    final isDesconocido = item.catalogMedicationId == CatalogConstants.unknownId;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 

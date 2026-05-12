@@ -8,6 +8,17 @@ import 'package:smart_meds_v2/features/inventory/data/fakes/fake_inventory_repos
 import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
 import 'package:smart_meds_v2/features/inventory/domain/repositories/inventory_repository.dart';
 
+// UI State Provider for Highlighting Cards
+class InventoryHighlightNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void setHighlight(String? id) => state = id;
+}
+
+final inventoryHighlightProvider = NotifierProvider<InventoryHighlightNotifier, String?>(() {
+  return InventoryHighlightNotifier();
+});
+
 final inventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
   return FakeInventoryRepository(ref.watch(localStorageServiceProvider));
 });
@@ -76,6 +87,14 @@ class InventoryNotifier extends AsyncNotifier<List<InventoryItem>> {
     });
   }
 
+  Future<void> updateItem(InventoryItem item) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(updateInventoryItemUseCaseProvider).execute(item);
+      return ref.read(getInventoryItemsUseCaseProvider).execute();
+    });
+  }
+
   Future<void> discardItem(String id) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
@@ -93,7 +112,7 @@ enum InventoryFilter {
   all,
   expiringSoon,
   expired,
-  outOfStock,
+  lowStock,
 }
 
 class InventoryFilterNotifier extends Notifier<InventoryFilter> {
@@ -126,24 +145,23 @@ final inventorySearchQueryProvider = NotifierProvider<InventorySearchQueryNotifi
   return InventorySearchQueryNotifier();
 });
 
-enum InventorySortCriteria {
-  expirationDate,
-  nameAZ,
-  lowStock,
+enum InventorySort {
+  byName,
+  byExpiryDate,
 }
 
-class InventorySortCriteriaNotifier extends Notifier<InventorySortCriteria> {
+class InventorySortNotifier extends Notifier<InventorySort> {
   @override
-  InventorySortCriteria build() => InventorySortCriteria.expirationDate;
+  InventorySort build() => InventorySort.byExpiryDate;
 
-  void setSortCriteria(InventorySortCriteria criteria) {
+  void setSort(InventorySort criteria) {
     state = criteria;
   }
 }
 
-final inventorySortCriteriaProvider =
-    NotifierProvider<InventorySortCriteriaNotifier, InventorySortCriteria>(() {
-  return InventorySortCriteriaNotifier();
+final inventorySortProvider =
+    NotifierProvider<InventorySortNotifier, InventorySort>(() {
+  return InventorySortNotifier();
 });
 
 final inventorySummaryProvider = Provider<AsyncValue<Map<String, int>>>((ref) {
@@ -154,7 +172,7 @@ final inventorySummaryProvider = Provider<AsyncValue<Map<String, int>>>((ref) {
       'total': items.length,
       'expiringSoon': items.where((i) => i.expirationState == ExpirationState.expiringSoon).length,
       'expired': items.where((i) => i.expirationState == ExpirationState.expired).length,
-      'outOfStock': items.where((i) => i.stockState == StockState.outOfStock).length,
+      'lowStock': items.where((i) => i.quantity <= 2).length,
     };
   });
 });
@@ -163,7 +181,7 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
   final inventoryAsync = ref.watch(inventoryListProvider);
   final filter = ref.watch(inventoryFilterProvider);
   final query = ref.watch(inventorySearchQueryProvider).trim().toLowerCase();
-  final sortCriteria = ref.watch(inventorySortCriteriaProvider);
+  final sort = ref.watch(inventorySortProvider);
 
   return inventoryAsync.whenData((items) {
     // 1. Filter by status
@@ -172,7 +190,7 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
       InventoryFilter.expiringSoon =>
         items.where((i) => i.expirationState == ExpirationState.expiringSoon).toList(),
       InventoryFilter.expired => items.where((i) => i.expirationState == ExpirationState.expired).toList(),
-      InventoryFilter.outOfStock => items.where((i) => i.stockState == StockState.outOfStock).toList(),
+      InventoryFilter.lowStock => items.where((i) => i.quantity <= 2).toList(),
     };
 
     // 2. Filter by search query
@@ -183,10 +201,9 @@ final filteredInventoryProvider = Provider<AsyncValue<List<InventoryItem>>>((ref
     // 3. Apply Sorting
     return List.of(searchFiltered)
       ..sort((a, b) {
-        return switch (sortCriteria) {
-          InventorySortCriteria.expirationDate => a.expirationDate.compareTo(b.expirationDate),
-          InventorySortCriteria.nameAZ => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-          InventorySortCriteria.lowStock => a.quantity.compareTo(b.quantity),
+        return switch (sort) {
+          InventorySort.byExpiryDate => a.expirationDate.compareTo(b.expirationDate),
+          InventorySort.byName => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         };
       });
   });
