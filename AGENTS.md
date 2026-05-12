@@ -1,45 +1,71 @@
-D:\proyectos\smart_meds_V2>flutter analyze
+---
+name: proywalki-fase-1
+description: Estructura base modular, tema y rutas para Proywalki
+invokable: true
+---
 
-┌─────────────────────────────────────────────────────────┐
-│ A new version of Flutter is available!                  │
-│                                                         │
-│ To update to the latest version, run "flutter upgrade". │
-└─────────────────────────────────────────────────────────┘
-Analyzing smart_meds_V2...
-No issues found! (ran in 3.7s)
+Inicia la FASE 1 del proyecto ubicado en `d:/Proywalki`.
 
-D:\proyectos\smart_meds_V2>flutter test
-00:07 +1: All tests passed!
+Contexto fijo:
+- Proyecto: Proywalki
+- Tipo: app Flutter para Android e iOS
+- Versión Flutter: 3.41.6 stable
+- Workspace raíz: `d:/Proywalki`
+- Carpeta de la app Flutter: `d:/Proywalki/app`
+- FASE 0 ya completada con bootstrap inicial y commit raíz.
 
-D:\proyectos\smart_meds_V2>
+Objetivo de la FASE 1:
+- Definir y aplicar una estructura modular limpia dentro de `app`.
+- Configurar tema base (light/dark si aplica).
+- Configurar navegación inicial con go_router.
+- Integrar gestión de estado con Riverpod (flutter_riverpod).
+- Dejar una pantalla inicial mínima que compile con la nueva arquitectura.
+- No implementar todavía mapas, geolocalización, Firebase ni chat.
 
+Restricciones:
+- Mantener la estructura por capas: `app`, `core`, `features`, `shared`.
+- Respetar el proyecto ya creado por `flutter create`.
+- Explicar antes de modificar archivos:
+  - qué se va a crear/modificar,
+  - por qué,
+  - qué criterio de aceptación tendrá.
+- Ejecutar:
+  - `flutter pub get`
+  - `dart format .`
+  - `flutter analyze`
+- No avanzar a la FASE 2 sin aprobación explícita del usuario.
 
-# AGENTS.md - Contexto y Reglas para Agentes de IA
+Tareas mínimas para esta fase:
+1. Proponer y aplicar estructura de carpetas dentro de `lib/`:
+   - `lib/app/`
+   - `lib/core/`
+   - `lib/features/`
+   - `lib/shared/`
+2. Instalar y configurar dependencias clave:
+   - `flutter_riverpod`
+   - `go_router`
+   - cualquier paquete de utilidades que se justifique brevemente.
+3. Reemplazar el `main.dart` generado por `flutter create` por una versión coherente con:
+   - Riverpod como root (ProviderScope),
+   - go_router para navegación,
+   - una ruta principal placeholder (por ejemplo, `HomePage`).
+4. Mantener la app compilable y analizable al finalizar la fase.
+5. Proponer un commit Git claro al cierre de la FASE 1.
 
-Este archivo define el contexto del proyecto y las reglas estrictas de interacción que los agentes de IA (como Antigravity) deben seguir al trabajar en **Smart Med V2**.
+Formato de respuesta obligatorio:
+1. FASE ACTUAL
+2. OBJETIVO
+3. ARCHIVOS A CREAR/MODIFICAR
+4. COMANDOS EN ORDEN (desde `d:/Proywalki`)
+5. CÓDIGO COMPLETO
+6. PRUEBAS Y VALIDACIÓN
+7. RESULTADO DE LA FASE
+8. COMMIT GIT SUGERIDO
+9. SIGUIENTE FASE PROPUESTA
+10. ESPERANDO APROBACIÓN
 
-## Objetivo del Proyecto
-Crear una aplicación eficiente y práctica para la gestión del botiquín del hogar, permitiendo un manejo claro del inventario personal y facilitando la búsqueda por medicamentos o malestares.
-
-## Resumen del Producto
-Smart Med V2 es la evolución desde cero del proyecto original. Incluirá un catálogo global moderado y un inventario privado por usuario, enfoque en la practicidad y resolución de problemas reales del botiquín doméstico. 
-
-## Reglas de Interacción Acordadas
-
-1. **Trabajar por Fases:** El desarrollo se divide en fases estrictas. No se deben adelantar funcionalidades de fases futuras.
-2. **Entregar Archivos Completos:** Cero opciones ambiguas, cero pseudocódigo y cero cambios parciales. Los archivos modificados o creados deben entregarse completos y funcionales.
-3. **Rutas Reales:** No asumir rutas inexistentes. Trabajar exclusivamente con las rutas proporcionadas.
-4. **Respetar la Raíz:** Todo el trabajo se realiza obligatoriamente en el directorio local:
-   `D:\proyectos\smart_meds_V2`
-5. **Aislamiento de V1:** Smart Med V1 no debe ser modificado, tocado ni alterado. Se mantiene exclusivamente como referencia.
-6. **Regla de OCR:** No se utilizará Gemini para la funcionalidad de OCR en V2. El OCR será local en fases futuras.
-7. **Regla de Dominio:** No se debe mezclar el catálogo global y el inventario privado en la misma entidad de dominio; deben permanecer estrictamente separados.
-8. **Configuración MCP:** `CODINGBUDDY_PROJECT_ROOT` es la única variable de entorno válida de referencia para la raíz del proyecto dentro de `mcp_config.json`. No inventar otras variables para la ruta del proyecto.
-9. **Sin Placeholders Falsos:** No introducir placeholders técnicos ficticios en configuraciones del proyecto; toda configuración debe ser real, válida o declararse explícitamente como pendiente futura sin comandos falsos.
-10. **Arquitectura Real:** Smart Med V2 usa arquitectura feature-first con capas por feature cuando aplique. No crear archivos vacíos sin propósito.
-11. **Fakes Permitidos en Fases Tempranas:** En fases tempranas se permiten fake repositories en memoria cuando sirven para validar arquitectura y flujos sin introducir infraestructura real.
-12. **Abstracción de Servicios de Captura:** La feature de Intake debe depender de interfaces de dominio para servicios de captura (Barcode, OCR). Esto permite que el flujo sea robusto y esté preparado para conectar implementaciones reales (cámara, hardware) en fases futuras sin reescribir la lógica de negocio.
-13. **Separación de Dominio y Data (DTOs):** Las entidades de dominio deben permanecer puras y libres de lógica de infraestructura (como serialización JSON). Se deben utilizar modelos/DTOs en la capa de data para manejar la persistencia y comunicación externa, con mappers claros hacia/desde el dominio.
-14. **Reglas de Coherencia de Inventario:** El inventario debe evitar duplicados combinando cantidades cuando se agrega un medicamento con el mismo ID de catálogo (o nombre normalizado si es desconocido) y la misma fecha de vencimiento.
-15. **Configuración de Backend:** La URL base del API debe estar centralizada en `AppConfig`. Se permite el uso de `bool.fromEnvironment` para alternar entre implementaciones remotas y fakes de desarrollo/test sin dejar código muerto.
-16. **Separación de Dominios de Datos:** El proyecto debe mantener una distinción clara entre el Dominio Privado (inventario del usuario), el Dominio Global (catálogo compartido) y el Dominio de Moderación (revisión de propuestas). Nunca mezclar estas entidades en la misma zona de persistencia.
+Instrucciones finales:
+- No avances a mapas ni backend; esta fase es solo estructura, tema y rutas.
+- Usa PowerShell con `;` en lugar de `&&` al proponer comandos.
+- Antes de tocar archivos, muestra la estructura de carpetas propuesta.
+- Espera mi aprobación antes de ejecutar comandos destructivos o cambios grandes.
