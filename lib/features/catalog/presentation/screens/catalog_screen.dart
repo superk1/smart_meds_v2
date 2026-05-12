@@ -4,6 +4,7 @@ import 'package:smart_meds_v2/core/constants/app_strings.dart';
 import 'package:smart_meds_v2/features/catalog/application/providers/catalog_providers.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_scaffold.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_section_title.dart';
+import 'package:smart_meds_v2/core/errors/app_exception.dart';
 
 class CatalogScreen extends ConsumerWidget {
   const CatalogScreen({super.key});
@@ -82,10 +83,65 @@ class CatalogScreen extends ConsumerWidget {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(child: Text('Error: $error')),
+              error: (error, stack) => _buildErrorState(ref, error),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(WidgetRef ref, Object error) {
+    IconData icon = Icons.error_outline_rounded;
+    String title = 'Ha ocurrido un error';
+    String message = error.toString();
+    Color iconColor = Colors.red.shade300;
+
+    if (error is NetworkException) {
+      icon = Icons.wifi_off_rounded;
+      title = 'Sin conexión';
+      iconColor = Colors.orange.shade300;
+    } else if (error is ServerException) {
+      icon = Icons.dns_rounded;
+      title = 'Error del servidor';
+    } else if (error is ClientException) {
+      icon = Icons.warning_amber_rounded;
+      title = 'Petición inválida';
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 64, color: iconColor),
+            const SizedBox(height: 24),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                ref.invalidate(catalogListProvider);
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -104,20 +160,20 @@ class CatalogScreen extends ConsumerWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                query.isEmpty ? Icons.library_books_outlined : Icons.search_off_rounded,
+                query.isEmpty ? Icons.medication_rounded : Icons.search_off_rounded,
                 size: 64,
                 color: Colors.grey.shade400,
               ),
             ),
             const SizedBox(height: 24),
             Text(
-              query.isEmpty ? 'Cargando catálogo...' : 'Sin coincidencias',
+              query.isEmpty ? 'Catálogo vacío' : 'Sin coincidencias',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
             ),
             const SizedBox(height: 12),
             Text(
               query.isEmpty 
-                ? 'Espera un momento mientras preparamos la lista.' 
+                ? 'No hay medicamentos disponibles en este momento.' 
                 : 'No encontramos nada para "$query". Prueba con otro nombre.',
               style: TextStyle(color: Colors.grey.shade600),
               textAlign: TextAlign.center,
