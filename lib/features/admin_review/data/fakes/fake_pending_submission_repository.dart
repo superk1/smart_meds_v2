@@ -59,6 +59,14 @@ class FakePendingSubmissionRepository implements PendingSubmissionRepository {
   }
 
   @override
+  Future<void> submitForReview(PendingMedicationSubmission submission) async {
+    await _init();
+    await Future.delayed(const Duration(milliseconds: 100));
+    _submissions.add(submission);
+    await _save();
+  }
+
+  @override
   Future<void> approveSubmission(String id) async {
     await _init();
     await Future.delayed(const Duration(milliseconds: 100));
