@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/inventory_providers.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/reminder_providers.dart';
+import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_item.dart';
 import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_reminder.dart';
 import 'package:smart_meds_v2/features/inventory/presentation/view_models/alert_center_entry.dart';
 
@@ -9,49 +10,39 @@ import 'package:smart_meds_v2/features/inventory/presentation/view_models/alert_
 final alertCenterEntriesProvider = Provider<List<AlertCenterEntry>>((ref) {
   final activeAlerts = ref.watch(activeAlertsProvider);
   final inventory = ref.watch(inventoryListProvider).value ?? [];
-  if (activeAlerts.isEmpty) return [];
-
+  
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
+  final Set<String> processedItemTypes = {};
   final List<AlertCenterEntry> entries = [];
 
+  // 1. First, process Manual Reminders (they have priority or are explicit)
   for (final reminder in activeAlerts) {
     final item = inventory.where((i) => i.id == reminder.inventoryItemId).firstOrNull;
-    // Descartar recordatorios huérfanos
     if (item == null) continue;
 
-    String title;
+    String title = item.name;
     String subtitle;
     int urgencyRank;
 
     if (reminder.type == ReminderType.expiration && reminder.targetDate != null) {
-      final target = DateTime(
-        reminder.targetDate!.year,
-        reminder.targetDate!.month,
-        reminder.targetDate!.day,
-      );
-      title = item.name;
-
+      final target = DateTime(reminder.targetDate!.year, reminder.targetDate!.month, reminder.targetDate!.day);
       if (target.isBefore(today)) {
-        subtitle = 'Vencido';
-        urgencyRank = 0; // Máxima urgencia
+        subtitle = 'Vencido (Recordatorio)';
+        urgencyRank = 0;
       } else if (target.isAtSameMomentAs(today)) {
         subtitle = 'Vence hoy';
         urgencyRank = 1;
       } else {
         final daysLeft = target.difference(today).inDays;
-        final dd = target.day.toString().padLeft(2, '0');
-        final mm = target.month.toString().padLeft(2, '0');
-        final yyyy = target.year;
-        subtitle = 'Vence el $dd/$mm/$yyyy ($daysLeft días)';
-        // Más cercano = más urgente (rank menor)
+        subtitle = 'Vence el ${target.day}/${target.month}/${target.year} ($daysLeft días)';
         urgencyRank = 2 + daysLeft;
       }
+      processedItemTypes.add('${item.id}_${ReminderType.expiration}');
     } else if (reminder.type == ReminderType.stock && reminder.targetQuantity != null) {
-      title = item.name;
-      subtitle = 'Quedan ${item.quantity} unidades (umbral: ${reminder.targetQuantity})';
-      // Stock: menor cantidad = más urgente
-      urgencyRank = 1000 + item.quantity;
+      subtitle = 'Bajo stock: quedan ${item.quantity} (umbral: ${reminder.targetQuantity})';
+      urgencyRank = 500 + item.quantity;
+      processedItemTypes.add('${item.id}_${ReminderType.stock}');
     } else {
       continue;
     }
@@ -66,6 +57,60 @@ final alertCenterEntriesProvider = Provider<List<AlertCenterEntry>>((ref) {
       targetQuantity: reminder.targetQuantity,
       urgencyRank: urgencyRank,
     ));
+  }
+
+  // 2. Second, process Automatic Health Alerts
+  for (final item in inventory) {
+    // A. Automatic Expiration
+    final expState = item.expirationState;
+    if (expState != ExpirationState.valid && !processedItemTypes.contains('${item.id}_${ReminderType.expiration}')) {
+      final expDate = DateTime(item.expirationDate.year, item.expirationDate.month, item.expirationDate.day);
+      final daysLeft = expDate.difference(today).inDays;
+      
+      String subtitle;
+      int urgencyRank;
+      
+      if (expState == ExpirationState.expired) {
+        subtitle = '¡Medicamento vencido!';
+        urgencyRank = 0;
+      } else {
+        subtitle = 'Vence pronto: $daysLeft días (${expDate.day}/${expDate.month})';
+        urgencyRank = 2 + daysLeft;
+      }
+
+      entries.add(AlertCenterEntry(
+        item: item,
+        type: ReminderType.expiration,
+        title: item.name,
+        subtitle: subtitle,
+        targetDate: item.expirationDate,
+        urgencyRank: urgencyRank,
+      ));
+    }
+
+    // B. Automatic Stock
+    final stState = item.stockState;
+    if (stState != StockState.inStock && !processedItemTypes.contains('${item.id}_${ReminderType.stock}')) {
+      String subtitle;
+      int urgencyRank;
+
+      if (stState == StockState.outOfStock) {
+        subtitle = '¡Agotado!';
+        urgencyRank = 5; // Muy urgente
+      } else {
+        subtitle = 'Stock bajo: ${item.quantity} unidades restantes';
+        urgencyRank = 500 + item.quantity;
+      }
+
+      entries.add(AlertCenterEntry(
+        item: item,
+        type: ReminderType.stock,
+        title: item.name,
+        subtitle: subtitle,
+        targetQuantity: 2, // Umbral por defecto de la entidad
+        urgencyRank: urgencyRank,
+      ));
+    }
   }
 
   entries.sort((a, b) => a.urgencyRank.compareTo(b.urgencyRank));
@@ -89,4 +134,11 @@ final alertCenterStockProvider = Provider<List<AlertCenterEntry>>((ref) {
 /// Contador total de alertas activas (para badge).
 final alertCenterCountProvider = Provider<int>((ref) {
   return ref.watch(alertCenterEntriesProvider).length;
+});
+
+/// Alertas de máxima urgencia (vencidos, agotan hoy, sin stock).
+final criticalAlertsProvider = Provider<List<AlertCenterEntry>>((ref) {
+  return ref.watch(alertCenterEntriesProvider)
+      .where((e) => e.urgencyRank < 10)
+      .toList();
 });

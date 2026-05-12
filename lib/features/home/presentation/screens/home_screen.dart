@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:smart_meds_v2/core/constants/app_strings.dart';
 import 'package:smart_meds_v2/features/auth/application/providers/auth_providers.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/inventory_sync_providers.dart';
+import 'package:smart_meds_v2/features/inventory/application/providers/alert_center_providers.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_scaffold.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_section_title.dart';
 
@@ -21,6 +22,8 @@ class HomeScreen extends ConsumerWidget {
           children: [
             const _UserSessionPanel(),
             const SizedBox(height: 16),
+            const _HealthAlertsSection(),
+            const SizedBox(height: 8),
             const AppSectionTitle(
               title: 'Panel Principal',
               description: 'Gestiona tu botiquín de forma inteligente.',
@@ -395,5 +398,119 @@ class _UserSessionPanel extends ConsumerWidget {
     if (diff.inHours < 24) return 'hace ${diff.inHours} h';
     
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _HealthAlertsSection extends ConsumerWidget {
+  const _HealthAlertsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final criticalAlerts = ref.watch(criticalAlertsProvider);
+    final totalCount = ref.watch(alertCenterCountProvider);
+
+    if (criticalAlerts.isEmpty) {
+      if (totalCount > 0) {
+        // Si hay alertas pero no críticas, mostrar un recordatorio suave
+        return _buildAlertSummary(context, totalCount);
+      }
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: Colors.red.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.red.shade200, width: 1.5),
+      ),
+      child: InkWell(
+        onTap: () => context.push('/alerts'),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.health_and_safety_outlined, color: Colors.red.shade700),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Estado del Botiquín',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.red,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.arrow_forward_ios, size: 14, color: Colors.red.shade300),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...criticalAlerts.take(2).map((alert) => Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  children: [
+                    Icon(
+                      alert.urgencyRank < 5 ? Icons.error_outline : Icons.warning_amber_rounded,
+                      size: 14,
+                      color: alert.urgencyRank < 5 ? Colors.red : Colors.orange.shade800,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${alert.item.name}: ${alert.subtitle}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.red.shade900,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+              if (criticalAlerts.length > 2)
+                Text(
+                  '+ ${criticalAlerts.length - 2} alertas críticas adicionales...',
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontStyle: FontStyle.italic),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlertSummary(BuildContext context, int count) {
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: Colors.orange.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.orange.shade200),
+      ),
+      child: ListTile(
+        onTap: () => context.push('/alerts'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        leading: Icon(Icons.notifications_active_outlined, color: Colors.orange.shade700),
+        title: Text(
+          'Tienes $count alertas activas',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            color: Colors.orange.shade900,
+          ),
+        ),
+        subtitle: const Text('Revisa los vencimientos próximos.', style: TextStyle(fontSize: 12)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+      ),
+    );
   }
 }

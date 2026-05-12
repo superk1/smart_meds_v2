@@ -5,7 +5,7 @@ import 'package:smart_meds_v2/features/inventory/domain/entities/inventory_remin
 ///
 /// Contiene datos ya preparados para la UI, evitando lógica en widgets.
 class AlertCenterEntry {
-  final InventoryReminder reminder;
+  final InventoryReminder? reminder;
   final InventoryItem item;
   final ReminderType type;
   final String title;
@@ -17,7 +17,7 @@ class AlertCenterEntry {
   final int urgencyRank;
 
   const AlertCenterEntry({
-    required this.reminder,
+    this.reminder,
     required this.item,
     required this.type,
     required this.title,
