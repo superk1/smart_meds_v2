@@ -69,3 +69,29 @@ Instrucciones finales:
 - Usa PowerShell con `;` en lugar de `&&` al proponer comandos.
 - Antes de tocar archivos, muestra la estructura de carpetas propuesta.
 - Espera mi aprobación antes de ejecutar comandos destructivos o cambios grandes.
+
+---
+
+## Historial de Fases (Smart Meds V2)
+
+
+### FASE 27: Robustez operativa del inventario y aseguramiento de calidad [COMPLETADA]
+- Consolidación del flujo Home → Inventario → Detalle → Sync.
+- Exportación e importación manual del inventario en formato JSON.
+- CI pipeline básico con validación automática.
+- Prueba de integración fundacional del flujo crítico principal.
+
+### FASE 28: Alertas operativas y salud del inventario [COMPLETADA]
+- Detección automática de medicamentos vencidos, próximos a vencer, agotados y con stock bajo.
+- Integración de alertas operativas dentro del Alert Center junto con recordatorios manuales.
+- Sección crítica de “Estado del Botiquín” en Home para visibilidad inmediata.
+- Priorización visual en Inventario mediante bordes, badges y estilos de alerta.
+- Disparo automático de notificaciones locales al cruzar umbrales críticos de stock.
+- Validación con `flutter analyze`.
+- Implementación organizada en 3 commits atómicos.
+
+#### Commits de cierre
+- `f3118fd3 feat(alerts): implement automatic health alerts and high-visibility Home section`
+- `939ea303 feat(inventory): prioritize critical items with visual highlights and vibrant badges`
+- `01fb7ef2 feat(alerts): add automatic system notifications for low stock transitions`
+
