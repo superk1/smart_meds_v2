@@ -6,6 +6,7 @@ import 'package:smart_meds_v2/core/constants/app_strings.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/inventory_providers.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/reminder_providers.dart';
 import 'package:smart_meds_v2/features/inventory/application/providers/alert_center_providers.dart';
+import 'package:smart_meds_v2/features/inventory/application/providers/inventory_sync_providers.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_scaffold.dart';
 import 'package:smart_meds_v2/shared/presentation/widgets/app_section_title.dart';
 
@@ -57,6 +58,18 @@ class InventoryScreen extends ConsumerWidget {
             ),
           ),
           
+          // Sync Status Indicator
+          Consumer(
+            builder: (context, ref, _) {
+              final syncState = ref.watch(inventorySyncControllerProvider);
+              if (!syncState.isSyncing && syncState.lastErrorMessage == null && syncState.lastSuccessMessage == null) {
+                return const SizedBox.shrink();
+              }
+              
+              return _SyncStatusBanner(state: syncState);
+            },
+          ),
+
           // Summary Header
           summaryAsync.when(
             data: (summary) => Padding(
@@ -216,8 +229,34 @@ class InventoryScreen extends ConsumerWidget {
                   },
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(child: Text('Error: $error')),
+              loading: () => const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Cargando inventario...', style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+              error: (error, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text('Error: $error', textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => ref.invalidate(inventoryListProvider),
+                        child: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -722,6 +761,77 @@ class _AlertCenterButton extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _SyncStatusBanner extends ConsumerWidget {
+  final InventorySyncState state;
+  const _SyncStatusBanner({required this.state});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isError = state.lastErrorMessage != null;
+    final isSuccess = state.lastSuccessMessage != null;
+    final isSyncing = state.isSyncing;
+
+    if (!isSyncing && !isError && !isSuccess) return const SizedBox.shrink();
+
+    Color bgColor = Colors.blue.shade50;
+    Color textColor = Colors.blue.shade900;
+    IconData icon = Icons.sync;
+    String message = 'Sincronizando...';
+
+    if (isError) {
+      bgColor = Colors.red.shade50;
+      textColor = Colors.red.shade900;
+      icon = Icons.error_outline;
+      message = state.lastErrorMessage!;
+    } else if (isSuccess) {
+      bgColor = Colors.green.shade50;
+      textColor = Colors.green.shade900;
+      icon = Icons.check_circle_outline;
+      message = state.lastSuccessMessage!;
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: textColor.withAlpha(50)),
+      ),
+      child: Row(
+        children: [
+          if (isSyncing)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Icon(icon, size: 18, color: textColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            onPressed: () => ref.read(inventorySyncControllerProvider.notifier).clearMessages(),
+            icon: const Icon(Icons.close, size: 16),
+            color: textColor,
+          ),
+        ],
+      ),
     );
   }
 }
