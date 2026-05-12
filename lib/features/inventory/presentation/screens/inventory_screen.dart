@@ -360,17 +360,38 @@ class _InventoryItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final stockState = item.stockState;
     final expirationState = item.expirationState;
+    final isExpired = expirationState == ExpirationState.expired;
+    final isExpiringSoon = expirationState == ExpirationState.expiringSoon;
+    final isLowStock = stockState == StockState.lowStock;
     final isOutOfStock = stockState == StockState.outOfStock;
+
+    final Color borderColor;
+    final double borderWidth;
+    if (isHighlighted) {
+      borderColor = Colors.indigo.shade300;
+      borderWidth = 2.0;
+    } else if (isExpired || isOutOfStock) {
+      borderColor = Colors.red.shade300;
+      borderWidth = 1.5;
+    } else if (isExpiringSoon || isLowStock) {
+      borderColor = Colors.orange.shade300;
+      borderWidth = 1.0;
+    } else {
+      borderColor = Colors.grey.shade200;
+      borderWidth = 1.0;
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
-      color: isHighlighted ? Colors.indigo.shade50 : Colors.white,
+      color: isHighlighted 
+          ? Colors.indigo.shade50 
+          : (isExpired || isOutOfStock ? Colors.red.shade50.withAlpha(50) : Colors.white),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isHighlighted ? Colors.indigo.shade300 : Colors.grey.shade200,
-          width: isHighlighted ? 2.0 : 1.0,
+          color: borderColor,
+          width: borderWidth,
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -594,14 +615,14 @@ class _MiniBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withAlpha(20),
+        color: color.withAlpha(40),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withAlpha(40)),
+        border: Border.all(color: color.withAlpha(80)),
       ),
       child: Text(
         text,
         style: TextStyle(
-          color: color.withAlpha(220),
+          color: color.withAlpha(255),
           fontSize: 10,
           fontWeight: FontWeight.bold,
         ),
